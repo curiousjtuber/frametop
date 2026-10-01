@@ -59,10 +59,11 @@ import time
 from pathlib import Path
 
 from fitcheck import MIN_REGION, FitCheck, wrap
-from gazecal import DEFAULT_MODEL, EYE_LOST, STATE, steady_samples
+from gazecal import DEFAULT_MODEL, EYE_LOST, STATE, binaries, steady_samples
 
 REPO = Path(__file__).resolve().parents[1]
 PANEL_PROG = REPO / "gaze" / "build" / "ft-gazepanel"
+PANEL_PROG_CROSS = REPO / "gaze" / "build-cross" / "ft-gazepanel"  # BINARIES=cross
 PANEL = "\0ft_gazepanel"
 POINTER = "\0ft_pointer_helper"
 SCREENS = "\0ft_screens"
@@ -187,16 +188,23 @@ class Checks:
     # --- The panel process ---
 
     def start_panel(self):
-        if not PANEL_PROG.exists():
-            log(f"ft-gazepanel isn't built: run {REPO}/gaze/build.sh")
+        cross = binaries() == "cross"
+        if not (PANEL_PROG_CROSS if cross else PANEL_PROG).exists():
+            log(f"ft-gazepanel isn't built: run {REPO}/" + ("xbuild/build.sh" if cross else "gaze/build.sh"))
             self.panel_restart_at = time.monotonic() + 60
             return
-        env = dict(os.environ)
-        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
-        distrobox = Path.home() / ".local" / "bin" / "distrobox"
-        self.panel_proc = subprocess.Popen([str(distrobox), "enter", "dev", "--", str(PANEL_PROG), "--watch-stdin"],
-                                           env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                           stderr=subprocess.PIPE, start_new_session=True)
+        if cross:
+            # Cross-compiled for the host: runs directly, and still quits when its stdin closes.
+            self.panel_proc = subprocess.Popen([str(PANEL_PROG_CROSS), "--watch-stdin"],
+                                               stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                               stderr=subprocess.PIPE, start_new_session=True)
+        else:
+            env = dict(os.environ)
+            env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+            distrobox = Path.home() / ".local" / "bin" / "distrobox"
+            self.panel_proc = subprocess.Popen([str(distrobox), "enter", "dev", "--", str(PANEL_PROG), "--watch-stdin"],
+                                               env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                               stderr=subprocess.PIPE, start_new_session=True)
         os.set_blocking(self.panel_proc.stderr.fileno(), False)
         self.sel.register(self.panel_proc.stderr, selectors.EVENT_READ, "panel")
         log("ft-gazepanel started")

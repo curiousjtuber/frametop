@@ -58,7 +58,9 @@ sed -i 's/^SCREENS=[0-9]*/SCREENS=$2/' \$f; grep ^SCREENS \$f" ;;
         "$frame" --host "set -e; f=~/.config/frametop.conf
 [ -f \$f ] || cp $session/frametop.conf.example \$f
 grep -q '^REMOTE=' \$f || echo 'REMOTE=0           # 1 = serve the desktop over VNC on the tailnet (port 5900)' >> \$f
-sed -i 's/^REMOTE=[01]/REMOTE=$v/' \$f; grep ^REMOTE \$f; echo 'applies the next time the desktop starts'" ;;
+sed -i 's/^REMOTE=[01]/REMOTE=$v/' \$f; grep ^REMOTE \$f; echo 'applies the next time the desktop starts'"
+        [ "$v" = 0 ] || on_frame 'podman container exists dev' ||
+          echo "the remote desktop runs krdp, FreeRDP and TigerVNC in the dev box, which isn't set up: run setup/dev-container.sh" >&2 ;;
       info)
         "$frame" --host "grep ^REMOTE ~/.config/frametop.conf 2>/dev/null || echo 'REMOTE not set'
 ip=\$(ip -4 -o addr show tailscale0 | awk '{print \$4}' | cut -d/ -f1)

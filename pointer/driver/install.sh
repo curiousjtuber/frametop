@@ -14,6 +14,9 @@ frame="$root/scripts/frame.sh"
 src=$FRAME_REPO/pointer/driver
 dest='$HOME/.local/share/frametop/ft_pointer'  # expanded on the Frame, in the commands below
 reg='/opt/steamvr/bin/linuxarm64/vrpathreg'
+# BINARIES=cross (see scripts/_env.sh): the driver and vrprobe from xbuild/build.sh's build-cross/.
+out=build probe=("$frame" -C pointer/probe)
+[ "$(frame_binaries)" = cross ] && out=build-cross probe=("$frame" --host -C pointer/probe)
 
 case ${1:-install} in
   install)
@@ -21,10 +24,10 @@ case ${1:-install} in
     # Replacing the files of a driver SteamVR has loaded leaves its input bindings in a bad
     # state (the 3D mouse no longer gets the laser) until SteamVR restarts, so an unchanged
     # driver is left alone.
-    "$frame" --host "set -e; test -f $src/build/driver_ft_pointer.so
+    "$frame" --host "set -e; test -f $src/$out/driver_ft_pointer.so
 rm -rf $dest.new; mkdir -p $dest.new/bin/linuxarm64
 cp -r $src/ft_pointer/. $dest.new/
-cp $src/build/driver_ft_pointer.so $dest.new/bin/linuxarm64/
+cp $src/$out/driver_ft_pointer.so $dest.new/bin/linuxarm64/
 if [ -d $dest ] && diff -r -q $dest $dest.new >/dev/null; then
   rm -rf $dest.new; echo 'driver unchanged'
 else
@@ -37,9 +40,9 @@ LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 $reg show | grep -A3 -i 'external'" 
     "$frame" --host "LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 $reg removedriver $dest; rm -rf $dest; echo 'removed; restart SteamVR to unload it'" ;;
   send)
     "$frame" --host "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); s.sendto(sys.argv[1].encode(), \"\\0ft_pointer\")' $(printf %q "${2:?command}")" ;;
-  probe) "$frame" -C pointer/probe 'LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 ./build/vrprobe' ;;
+  probe) "${probe[@]}" "LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 ./$out/vrprobe" ;;
   aimhere)
-    read -r yaw pitch < <("$frame" -C pointer/probe 'LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 ./build/vrprobe' | sed -n 's/^head yaw = \([-0-9.]*\) pitch = \([-0-9.]*\)$/\1 \2/p')
+    read -r yaw pitch < <("${probe[@]}" "LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64 ./$out/vrprobe" | sed -n 's/^head yaw = \([-0-9.]*\) pitch = \([-0-9.]*\)$/\1 \2/p')
     [ -n "${yaw:-}" ] || { echo "head pose not valid (headset off?)" >&2; exit 1; }
     "$0" send "aim $yaw $pitch" && echo "aimed at yaw $yaw pitch $pitch" ;;
   log) "$frame" --host "grep -iE 'ft_pointer' ~/.local/share/Steam/logs/vrserver.txt | tail -n ${2:-20}" ;;

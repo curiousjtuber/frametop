@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install, start, stop, or inspect ft-powerd on the Frame (runs in the dev container).
+# Install, start, stop, or inspect ft-powerd on the Frame (runs in the dev container, or with
+# BINARIES=cross on the host).
 # Usage: power/run.sh install|uninstall   # user service, starts with SteamVR
 #        power/run.sh start|stop|restart|status|log [lines]
 #        power/run.sh off|on               # the displays off now (to try it) or back on
@@ -11,7 +12,9 @@ unit=frametop-power.service
 case ${1:-status} in
   install)
     "$root/scripts/sync.sh" >/dev/null
-    fill_template "$root/power/$unit" | on_frame "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/$unit"
+    template=$unit
+    [ "$(frame_binaries)" = cross ] && template=frametop-power-cross.service
+    fill_template "$root/power/$template" | on_frame "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/$unit"
     "$frame" --host "set -e; pkill -x ft-powerd || true
 systemctl --user daemon-reload; systemctl --user enable $unit
 $(start_with_steamvr $unit)" ;;

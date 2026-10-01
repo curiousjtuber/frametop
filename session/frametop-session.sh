@@ -98,14 +98,20 @@ if [ "${1:-}" != --inner ]; then
       -- "$0" --inner
   fi
 
-  # ft-screens runs in the dev container (it's built against Fedora's wlroots); KWin and
-  # Plasma stay on the host and connect to its socket.
+  # ft-screens runs in the dev container (it's built against Fedora's wlroots), or with
+  # BINARIES=cross on the host; KWin and Plasma stay on the host and connect to its socket.
   socket=ft-screens-0
   read -ra screen_args <<< "$("$here/../layout/ft-layout" screen-args)"
   export FT_SCREEN_COUNT=$(( ${#screen_args[@]} / 2 )) FT_FLOAT_SLOTS=$float_slots
-  "$here/../scripts/container-up.sh"  # not owned by this desktop, or stopping it would stop the container
-  "$HOME/.local/bin/distrobox" enter dev -- "$here/../screens/build/ft-screens" --socket "$socket" \
-    "${screen_args[@]}" --spares "$float_slots" > /tmp/frametop-screens.log 2>&1 < /dev/null &
+  if [ "${BINARIES:-dev}" = cross ]; then
+    # Cross-compiled for the host (xbuild/build.sh): no container.
+    "$here/../screens/build-cross/ft-screens" --socket "$socket" \
+      "${screen_args[@]}" --spares "$float_slots" > /tmp/frametop-screens.log 2>&1 < /dev/null &
+  else
+    "$here/../scripts/container-up.sh"  # not owned by this desktop, or stopping it would stop the container
+    "$HOME/.local/bin/distrobox" enter dev -- "$here/../screens/build/ft-screens" --socket "$socket" \
+      "${screen_args[@]}" --spares "$float_slots" > /tmp/frametop-screens.log 2>&1 < /dev/null &
+  fi
   stop_screens() { pkill -x ft-screens 2>/dev/null || true; }
   trap stop_screens EXIT
   for _ in $(seq 100); do [ -S "$XDG_RUNTIME_DIR/$socket" ] && break; sleep 0.2; done

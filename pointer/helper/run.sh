@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start, stop, or inspect the ft-pointer helper on the Frame (runs in the dev container).
+# Start, stop, or inspect the ft-pointer helper on the Frame (runs in the dev container, or
+# with BINARIES=cross on the host).
 # Usage: pointer/helper/run.sh install|uninstall   # user service, starts with SteamVR
 #        pointer/helper/run.sh start|stop|restart|status|log [lines]
 # With the service installed, start/stop/restart/log go through systemd.
@@ -12,15 +13,20 @@ installed() { "$frame" --host "test -f ~/.config/systemd/user/$unit" 2>/dev/null
 case ${1:-status} in
   install)
     "$root/scripts/sync.sh" >/dev/null
-    fill_template "$root/pointer/helper/$unit" | on_frame "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/$unit"
+    template=$unit
+    [ "$(frame_binaries)" = cross ] && template=frametop-pointer-cross.service
+    fill_template "$root/pointer/helper/$template" | on_frame "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/$unit"
     "$frame" --host "set -e; pkill -x ft-pointer || true
 systemctl --user daemon-reload; systemctl --user enable $unit
 $(start_with_steamvr $unit)" ;;
   uninstall) "$frame" --host "systemctl --user disable --now $unit 2>/dev/null; rm -f ~/.config/systemd/user/$unit; systemctl --user daemon-reload; echo removed" ;;
   start|stop|restart) if installed; then "$frame" --host "systemctl --user $1 $unit; systemctl --user is-active $unit"; exit; fi ;;&
   log) if installed; then "$frame" --host "journalctl --user -u $unit --no-pager -o cat -n ${2:-30}"; exit; fi ;;&
-  start) "$frame" -C pointer/helper 'pgrep -x ft-pointer >/dev/null && { echo "already running"; exit 0; }
-nohup ./build/ft-pointer > /tmp/ft-pointer.log 2>&1 &
+  start)
+    where=() out=build
+    [ "$(frame_binaries)" = cross ] && where=(--host) out=build-cross
+    "$frame" "${where[@]}" -C pointer/helper 'pgrep -x ft-pointer >/dev/null && { echo "already running"; exit 0; }
+nohup ./'$out'/ft-pointer > /tmp/ft-pointer.log 2>&1 &
 sleep 2; pgrep -ax ft-pointer; cat /tmp/ft-pointer.log' ;;
   stop) "$frame" --host 'pkill -x ft-pointer && echo stopped || echo "not running"' ;;
   restart) "$0" stop; sleep 1; exec "$0" start ;;

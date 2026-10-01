@@ -109,10 +109,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gazecal import (DEFAULT_MODEL, EYE_FOUND, EYE_LOST, MODELS, STATE, Correction, EyeFallback,  # noqa: E402
                      EyeWeights, Fixation, LiveCorrection, SteamEyeLog)
+from gazecal import binaries  # noqa: E402
 from gazecheck import Checks  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 HELPER = REPO / "gaze" / "build" / "ft-gaze"
+HELPER_CROSS = REPO / "gaze" / "build-cross" / "ft-gaze"  # BINARIES=cross
 ME = "\0ft_gazed"
 POINTER = "\0ft_pointer_helper"
 EYES_PROG = REPO / "gaze" / "tracker" / "ft-eyes"  # our own tracker
@@ -385,18 +387,25 @@ class Service:
     # --- ft-gaze ---
 
     def start_helper(self):
-        if not HELPER.exists():
-            log(f"ft-gaze isn't built: run {REPO}/gaze/build.sh")
+        cross = binaries() == "cross"
+        if not (HELPER_CROSS if cross else HELPER).exists():
+            log(f"ft-gaze isn't built: run {REPO}/" + ("xbuild/build.sh" if cross else "gaze/build.sh"))
             self.restart_at = time.monotonic() + 30
             return
-        env = dict(os.environ)
-        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"  # podman needs the real one
-        subprocess.run([str(REPO / "scripts" / "container-up.sh")], env=env, check=False)
-        distrobox = Path.home() / ".local" / "bin" / "distrobox"
-        # ft-gaze quits when its stdin closes: the one thing distrobox passes on.
-        self.proc = subprocess.Popen([str(distrobox), "enter", "dev", "--", str(HELPER), "--watch-stdin"], env=env,
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     start_new_session=True)
+        if cross:
+            # Cross-compiled for the host: runs directly, and still quits when its stdin closes.
+            self.proc = subprocess.Popen([str(HELPER_CROSS), "--watch-stdin"],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                         start_new_session=True)
+        else:
+            env = dict(os.environ)
+            env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"  # podman needs the real one
+            subprocess.run([str(REPO / "scripts" / "container-up.sh")], env=env, check=False)
+            distrobox = Path.home() / ".local" / "bin" / "distrobox"
+            # ft-gaze quits when its stdin closes: the one thing distrobox passes on.
+            self.proc = subprocess.Popen([str(distrobox), "enter", "dev", "--", str(HELPER), "--watch-stdin"], env=env,
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                         start_new_session=True)
         os.set_blocking(self.proc.stdout.fileno(), False)
         os.set_blocking(self.proc.stderr.fileno(), False)
         self.sel.register(self.proc.stdout, selectors.EVENT_READ, "stdout")

@@ -152,6 +152,14 @@ curl -fsSL https://deejanuz.github.io/frametop/get.sh | bash
 
 Or by hand: `cd ~/frametop && git pull && ./install.sh`.
 
+## Cross-compiled programs (optional)
+
+By default, Frametop's native programs (ft-screens, the pointer helper, the power service, ft-gaze and its panel, and the SteamVR driver) are built in the dev box and run inside it. `./install.sh --cross` uses programs cross-compiled with zig instead ([xbuild/README.md](xbuild/README.md)). They run on the SteamOS host without the container, so they start about 0.4 s sooner and each uses about 36 MB less memory, and the Frame doesn't need the dev box for them.
+
+Both builds can be on the Frame at once: the cross-compiled ones are in each folder's `build-cross/`, next to `build/`. `BINARIES=dev` or `BINARIES=cross` in `~/.config/frametop.conf` picks one, and `./install.sh --cross` sets it. To go back, set `BINARIES=dev` and run `./install.sh` again.
+
+With `--cross`, setting up the dev box is your choice, and the installer does it unless you say no or pass `--no-dev-box`. It's still what the remote desktop runs in, what gaze mode's own tracker (`gaze/tracker/ft-eyes`, Python with NumPy and OpenCV) runs in, what builds the programs on the Frame, and what runs the settings apps unless `setup/pyside-venv.sh` has set them up on the host. Without it, build the programs on a PC with `xbuild/build.sh` and copy them to the Frame first.
+
 ## Uninstall
 
 ```
@@ -195,6 +203,7 @@ A Plasma session runs nested inside ft-screens (`screens/`), a small Wayland com
 | `remote/` | Frametop Remote Access, the app that turns remote desktop over VNC on and off. |
 | `setup/` | The build container and the Bluetooth fixes. See [setup/README.md](setup/README.md). |
 | `scripts/` | Helpers the installers use. They run commands locally on the Frame, or over SSH from a PC. |
+| `xbuild/` | Cross-compiling the native programs with zig (optional; see [Cross-compiled programs](#cross-compiled-programs-optional)). |
 
 ## Developing from a PC
 

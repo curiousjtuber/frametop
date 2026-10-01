@@ -54,6 +54,15 @@ on_frame_script() {
   fi
 }
 
+# frame_binaries: which build of the native programs the Frame runs, from BINARIES in its
+# ~/.config/frametop.conf: dev (the default: built and run in the dev container) or cross
+# (xbuild/build.sh's build-cross/, run on the host).
+frame_binaries() {
+  local b
+  b=$(on_frame "sed -n 's/^BINARIES=\([a-z]*\).*/\1/p' ~/.config/frametop.conf 2>/dev/null | tail -1")
+  [ "$b" = cross ] && echo cross || echo dev
+}
+
 # fill_template <file>: print a file with @REPO@ replaced by the Frame's repo path.
 fill_template() {
   sed "s|@REPO@|$FRAME_REPO|g" "$1"

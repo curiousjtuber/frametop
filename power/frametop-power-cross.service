@@ -1,0 +1,20 @@
+# Template: the installer replaces @REPO@ with the repo path on the Frame.
+# With BINARIES=cross: power/run.sh installs this instead of frametop-power.service.
+[Unit]
+Description=Frametop power: turns the headset's displays off while nobody is using it
+Documentation=file://@REPO@/docs/reference.md
+# Needs SteamVR's IPC; it starts and stops with SteamVR.
+After=steamvr.service
+PartOf=steamvr.service
+
+[Service]
+# Cross-compiled for the host (xbuild/build.sh), so it runs directly as the main process.
+ExecStartPre=-/usr/bin/pkill -x ft-powerd
+ExecStart=@REPO@/power/build-cross/ft-powerd
+# SIGTERM makes ft-powerd turn the displays back on before it exits.
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=5
+
+[Install]
+WantedBy=steamvr.service

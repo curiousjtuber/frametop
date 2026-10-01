@@ -10,7 +10,9 @@ It runs on any Linux with distrobox and podman, the Frame included. On the host,
 
 zig is 0.16.0, the version `xbuild/mise.toml` pins, since zig's options change between releases. With [mise](https://mise.jdx.dev) installed, the scripts install and use that version themselves; the box shares your home folder, so the host's mise works there. Without mise, they install Fedora's `zig` package in the box, and stop if its version isn't the pinned one. The box also gets `bsdtar`. Both are installed by xbuild itself, so `setup/dev-container.sh`'s list stays as it is for everyone who doesn't cross-compile.
 
-Built on a PC, copy them to the Frame's checkout. This copies only the programs:
+To use them, run `./install.sh --cross` on the Frame, or from a PC (see "Cross-compiled programs" in the top-level README). It sets `BINARIES=cross` in `~/.config/frametop.conf`, which the session script, the pointer, power and driver installers, and the gaze service read.
+
+Built on a PC by hand, copy them to the Frame's checkout. This copies only the programs:
 
 ```
 rsync -am --exclude='/xbuild/' --exclude='.git/' --include='*/' --include='build-cross/***' --exclude='*' ./ frame:frametop/

@@ -15,6 +15,20 @@ from pathlib import Path
 
 STATE = Path.home() / ".local" / "state" / "frametop" / "gaze"
 
+
+def binaries():
+    """Which build of ft-gaze to run, from BINARIES in ~/.config/frametop.conf: "dev" (the
+    default, in the dev container) or "cross" (xbuild/build.sh's build-cross/, on the host)."""
+    value = "dev"
+    try:
+        with open(Path.home() / ".config" / "frametop.conf") as f:
+            for line in f:
+                if line.startswith("BINARIES="):
+                    value = line.split("=", 1)[1].split("#", 1)[0].strip()
+    except OSError:
+        pass
+    return "cross" if value == "cross" else "dev"
+
 # --- Small math ---------------------------------------------------------------------
 
 def px_from_deg(j, dy, dp):

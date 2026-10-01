@@ -9,7 +9,12 @@ frame="$root/scripts/frame.sh"
 unit=frametop-gaze.service
 case ${1:-status} in
   install)
-    "$root/gaze/build.sh"
+    if [ "$(frame_binaries)" = cross ]; then  # xbuild/build.sh builds it
+      on_frame "test -x gaze/build-cross/ft-gaze -a -x gaze/build-cross/ft-gazepanel" ||
+        { echo "gaze/build-cross/ft-gaze or ft-gazepanel is missing: run xbuild/build.sh" >&2; exit 1; }
+    else
+      "$root/gaze/build.sh"
+    fi
     fill_template "$root/gaze/$unit" | on_frame "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/$unit"
     on_frame "chmod +x gaze/ft-gazed gaze/ft-gazectl"
     "$frame" --host "set -e; systemctl --user daemon-reload; systemctl --user enable $unit

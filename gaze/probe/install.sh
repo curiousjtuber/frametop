@@ -8,7 +8,11 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 apps=.local/share/applications
 case ${1:-install} in
   install)
-    "$root/gaze/build.sh"
+    if [ "$(frame_binaries)" = cross ]; then  # xbuild/build.sh builds it
+      on_frame "test -x gaze/build-cross/ft-gaze" || { echo "gaze/build-cross/ft-gaze is missing: run xbuild/build.sh" >&2; exit 1; }
+    else
+      "$root/gaze/build.sh"
+    fi
     fill_template "$root/gaze/probe/ft-gazeprobe.desktop" | on_frame "mkdir -p ~/$apps && cat > ~/$apps/ft-gazeprobe.desktop"
     on_frame "chmod +x gaze/probe/ft-gazeprobe"
     echo "installed: Frametop Gaze Probe" ;;

@@ -5,21 +5,26 @@
 # for example after `git pull`. (Hand tracking, hands/, is deferred: it isn't offered here.)
 # (It also works from a PC over SSH; see "Developing from a PC" in the README.)
 #
-# Usage: ./install.sh [--yes] [--no-bluetooth]
+# Usage: ./install.sh [--yes] [--no-bluetooth] [--cross [--no-dev-box]]
 #   --yes           don't ask; installs gaze mode, skips the Bluetooth fixes and the SteamVR
 #                   restart
 #   --no-bluetooth  don't offer the Bluetooth fixes
+#   --cross         cross-compiled programs (xbuild/), run on the host: BINARIES=cross in
+#                   ~/.config/frametop.conf, which a later plain ./install.sh keeps
+#   --no-dev-box    with --cross: don't set up the dev box (remote desktop, building here)
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$root/scripts/_env.sh"
 
-assume_yes=0 bluetooth=1
+assume_yes=0 bluetooth=1 cross=0 dev_box=
 for arg in "$@"; do
   case $arg in
     --yes) assume_yes=1 ;;
     --no-bluetooth) bluetooth=0 ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    --cross) cross=1 ;;
+    --no-dev-box) dev_box=0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -50,8 +55,23 @@ if [ "$FRAME_LOCAL" = 0 ] || [ -n "${SSH_CONNECTION:-}" ]; then
   echo "that need SteamVR start with it if it isn't running now."
 fi
 
+# Cross-compiled programs (xbuild/README.md): BINARIES=cross, set before the installers
+# below read it. The dev box is optional then, since nothing runs in it but the remote
+# desktop, gaze mode's own tracker, and the settings apps unless setup/pyside-venv.sh has run.
+[ "$cross" = 1 ] || [ "$(frame_binaries)" = dev ] || cross=1
+if [ "$cross" = 1 ]; then
+  on_frame "f=~/.config/frametop.conf; [ -f \$f ] || cp session/frametop.conf.example \$f
+sed -i 's/^BINARIES=[a-z]*/BINARIES=cross/' \$f; grep -q '^BINARIES=' \$f || echo 'BINARIES=cross' >> \$f"
+  if [ -z "$dev_box" ]; then
+    ask "Set up the dev box on the Frame? It has the remote desktop tools (krdp, FreeRDP, TigerVNC) and gaze mode's own tracker, lets xbuild build there, and runs the settings apps unless setup/pyside-venv.sh has (1-2 GB)." y && dev_box=1 || dev_box=0
+  fi
+  echo "cross-compiled programs (BINARIES=cross in ~/.config/frametop.conf); dev box: $([ "$dev_box" = 1 ] && echo yes || echo no)"
+fi
+
 step "1/9 distrobox (container tool, installed in your home folder)"
-if on_frame 'test -x ~/.local/bin/distrobox'; then
+if [ "$cross" = 1 ] && [ "$dev_box" = 0 ]; then
+  echo "skipped: no dev box"
+elif on_frame 'test -x ~/.local/bin/distrobox'; then
   echo "already installed: $(on_frame '~/.local/bin/distrobox version | head -1')"
 else
   on_frame 'set -e; mkdir -p ~/dev/src
@@ -60,32 +80,50 @@ else
 cd ~/dev/src/distrobox && ./install --prefix ~/.local'
 fi
 
+if [ "$cross" = 1 ]; then
+  step "2/9 cross-compiled programs (xbuild/), and the dev box if wanted"
+  [ "$dev_box" = 1 ] && "$root/setup/dev-container.sh"
+  if [ "$FRAME_LOCAL" = 0 ]; then  # from a PC: build in its own dev box, then copy
+    "$root/xbuild/build.sh"
+    rsync -am --exclude='/xbuild/' --exclude='.git/' --include='*/' --include='build-cross/***' --exclude='*' \
+      "$root/" "$FRAME_HOST:${FRAME_REPO#/home/steamos/}/"
+  elif [ "$dev_box" = 1 ]; then
+    "$root/xbuild/build.sh"
+  elif ! on_frame 'test -x screens/build-cross/ft-screens -a -x pointer/helper/build-cross/ft-pointer -a -f pointer/driver/build-cross/driver_ft_pointer.so -a -x power/build-cross/ft-powerd'; then
+    echo "no cross-compiled programs here: build them on a PC with xbuild/build.sh and copy build-cross/ (xbuild/README.md), or run ./install.sh --cross with the dev box" >&2
+    exit 1
+  fi
+else
 step "2/9 build container (Fedora 44 'dev', about 1-2 GB the first time)"
 "$root/setup/dev-container.sh"
+fi
 
 step "3/9 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
 "$root/desktops.sh" relay install
 
 step "4/9 3D mouse: SteamVR driver"
-"$root/pointer/driver/build.sh"
+[ "$cross" = 1 ] || "$root/pointer/driver/build.sh"
 "$root/pointer/driver/install.sh" install 2>&1 | grep -v xdg-open
 
 step "5/9 3D mouse: pointer helper service"
-"$root/pointer/helper/build.sh"
+[ "$cross" = 1 ] || "$root/pointer/helper/build.sh"
 "$root/pointer/helper/run.sh" install
 
 step "6/9 power service (turns the displays off while the headset isn't used, even on a stand)"
-"$root/power/build.sh"
+[ "$cross" = 1 ] || "$root/power/build.sh"
 "$root/power/run.sh" install
 
 step "7/9 multi-screen desktop (ft-screens), Frametop Input Settings, and Frametop Display Settings"
-"$root/screens/build.sh"
+[ "$cross" = 1 ] || "$root/screens/build.sh"
 "$root/desktops.sh" install >/dev/null
 "$root/input-settings/install.sh"
 "$root/display-settings/install.sh"
 "$root/remote/install.sh"
 on_frame "sed -i 's/^POINTER=0/POINTER=1/' ~/.config/frametop.conf; grep -q '^POINTER=' ~/.config/frametop.conf || echo 'POINTER=1' >> ~/.config/frametop.conf"
 echo "the launcher's Desktop entry now opens the multi-screen desktop; 3D mouse on (POINTER=1 in ~/.config/frametop.conf)"
+if [ "$cross" = 1 ] && [ "$dev_box" = 0 ] && ! on_frame 'test -x ~/.local/share/frametop/pyside/bin/frametop-python'; then
+  echo "without the dev box, the settings apps need setup/pyside-venv.sh (needs mise)"
+fi
 
 step "8/9 gaze mode (optional, experimental: the pointer goes where you look)"
 if ask "Install gaze mode? You turn it on and calibrate it in Frametop Input Settings, on the Gaze page." y; then
