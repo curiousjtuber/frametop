@@ -162,6 +162,15 @@ With `--cross`, setting up the dev box is your choice, and the installer does it
 
 ## Uninstall
 
+To turn Frametop off without deleting anything, for example to rule it out when a game misbehaves, and to turn it back on:
+
+```
+./disable.sh   # removes the relay, the 3D mouse, the power and gaze services; the launcher opens the stock desktop
+./enable.sh    # puts them back (the gaze service if it was on); builds nothing
+```
+
+Both ask first whether to restart SteamVR at the end, which they need to take full effect. Settings and builds stay. To remove Frametop:
+
 ```
 ./desktops.sh uninstall                # the launcher's Desktop entry goes back to the stock desktop
 ./desktops.sh relay uninstall
