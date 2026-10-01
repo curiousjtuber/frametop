@@ -40,12 +40,20 @@ distrobox=$HOME/.local/bin/distrobox
 if ! podman container exists dev; then
   echo "creating the dev container (Fedora 44 toolbox)"
   "$distrobox" create --yes --name dev --image registry.fedoraproject.org/fedora-toolbox:44
+  # The first start sets the container up, and until that's done, sudo there asks for a
+  # password, which stops dnf below. Wait for it. (This script is bash's stdin: keep enter
+  # off it, or it reads away the rest of the script.)
+  "$repo/scripts/container-up.sh"
+  for _ in $(seq 60); do "$distrobox" enter dev -- sudo -n true < /dev/null 2>/dev/null && break; sleep 2; done
 fi
 "$repo/scripts/container-up.sh"  # in a scope of its own, not this shell's
 "$distrobox" enter dev -- bash -c '
 set -euo pipefail
 echo "installing ${#@} packages (already-installed ones are skipped)"
-sudo dnf install -y -q "$@" 2>&1 | { grep -vE "is already installed|^Nothing to do|^$" || true; }
+# On a new box, the %post of udisks2 fails in a container and dnf calls the whole install
+# failed, though every package is in. Only stop if one really is missing.
+sudo dnf install -y -q "$@" 2>&1 | { grep -vE "is already installed|^Nothing to do|^$" || true; } ||
+  rpm -q "$@" > /dev/null
 # OpenVR programs built here (the pointer helper and probe) look for the runtime at /opt/steamvr.
 [ -e /opt/steamvr ] || sudo ln -s /run/host/opt/steamvr /opt/steamvr
 echo "dev container ready: $(. /etc/os-release; echo $PRETTY_NAME), glibc $(ldd --version | head -1 | grep -oE "[0-9.]+$")"
