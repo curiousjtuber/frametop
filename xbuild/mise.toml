@@ -1,0 +1,4 @@
+# The zig xbuild is tested with: its options change between releases (0.16 has no
+# --exclude-libs, for one). xbuild/_env.sh installs and uses it through mise.
+[tools]
+zig = "0.16.0"
