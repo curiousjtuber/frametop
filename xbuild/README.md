@@ -35,3 +35,5 @@ None of them needs the host's libstdc++: zig links its libc++ in statically. Ope
 - The driver exports only `HmdDriverFactory` (`driver.map`), so libc++'s `operator new` and `delete` don't leak into vrserver. zig's linker has no `--exclude-libs`, which the container build uses for this.
 
 `build.sh` fails if any program needs a glibc symbol newer than 2.39. After a SteamOS update, compare the host's versions (`pacman -Q wayland libxkbcommon libdrm pixman glibc`) with the sysroot's.
+
+The settings apps aren't compiled. To run them without the container too, see `setup/pyside-venv.sh`. Then only the remote desktop needs the `dev` box, for Fedora's krdp, FreeRDP and TigerVNC.

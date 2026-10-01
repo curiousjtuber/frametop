@@ -6,6 +6,7 @@ One-time setup for the Steam Frame itself: the `dev` build container and the Blu
 | --- | --- | --- |
 | `dev-container.sh` | The `dev` build container (Fedora 44 toolbox) with every package the projects need | No |
 | `bluetooth/install.sh` | Persistent fixes so Bluetooth LE mice and keyboards reconnect | Yes |
+| `pyside-venv.sh` | PySide6 on the host, so the settings apps run without the `dev` container (optional) | No |
 
 ## Build container
 
@@ -14,6 +15,16 @@ setup/dev-container.sh
 ```
 
 It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
+
+## Settings apps without the container
+
+```
+setup/pyside-venv.sh
+```
+
+Frametop Display Settings and Frametop Input Settings are Python apps (PySide6 and Kirigami). The host has Qt 6 and Kirigami, because Plasma uses them, but no PySide6, so by default the apps run in the `dev` container. This script puts PySide6 on the host instead, in `~/.local/share/frametop/pyside`, and the apps' launchers use it whenever it's there. It needs [mise](https://mise.jdx.dev) in `~/.local/bin`, which provides Python 3.13 and uv.
+
+It installs PySide6-Essentials pinned to the host's exact Qt version (6.8.0 on SteamOS 0.3.0) and deletes the copy of Qt the wheel brings, so the bindings load the host's own Qt, the one Kirigami and the Breeze style are built against. SteamOS's Qt exports three QML engine functions under the symbol version `Qt_6` where PySide expects `Qt_6_PRIVATE_API`; `retag-versions.py` rewrites those three imports in `libpyside6qml`. Re-run it after a SteamOS update: it rebuilds only when the host's Qt version has changed, and `--force` rebuilds anyway. To go back to the container, delete `~/.local/share/frametop/pyside`.
 
 ## Bluetooth LE mice and keyboards
 
