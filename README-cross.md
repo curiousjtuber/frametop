@@ -33,6 +33,19 @@ None of them needs the host's libstdc++: zig links its libc++ in statically. Ope
 
 `build.sh` fails if any program needs a glibc symbol newer than 2.39. On the Frame, it then runs `xbuild/check.sh`, which has the host's dynamic loader resolve every program against the host's own libraries, each library and symbol version, without running anything. Built elsewhere, the check runs once they're on the Frame. A gap there, from a SteamOS too old or too new for what they were built against, stops with a FAIL line for each missing library or symbol. Then use the dev box build (`./install.sh`, README.md) instead, which builds against the container's libraries and runs the programs there.
 
+## The Python apps on the host
+
+Frametop Display Settings and Frametop Input Settings (PySide6 and Kirigami), and gaze mode's own eye tracker (`gaze/tracker/ft-eyes`, NumPy and OpenCV) aren't compiled. In the regular install they run in the dev box, which has their libraries. Two scripts put those on the host instead, each in a virtual environment made with Python 3.13 and uv from [mise](https://mise.jdx.dev), which has to be in `~/.local/bin` on the Frame:
+
+```
+setup/pyside-venv.sh   # ~/.local/share/frametop/pyside
+setup/eyes-venv.sh     # ~/.local/share/frametop/eyes
+```
+
+The host has Qt 6 and Kirigami, because Plasma uses them, but no PySide6. `pyside-venv.sh` installs PySide6-Essentials pinned to the host's exact Qt version (6.8.0 on SteamOS 0.3.0) and deletes the copy of Qt the wheel brings, so the bindings load the host's own Qt, the one Kirigami and the Breeze style are built against. SteamOS's Qt exports three QML engine functions under the symbol version `Qt_6` where PySide expects `Qt_6_PRIVATE_API`; `retag-versions.py` rewrites those three imports in `libpyside6qml`. `eyes-venv.sh` installs the wheels `gaze/tracker/requirements.txt` pins.
+
+Both are safe to re-run, and rebuild only when something changed: the host's Qt version (after a SteamOS update) or `requirements.txt`. `--force` rebuilds anyway.
+
 ## How it works
 
 - `sysroot.sh` unpacks Arch Linux ARM's wayland, libxkbcommon, libdrm, pixman, libffi, wayland-protocols, libglvnd and mesa packages into `xbuild/build/alarm/sysroot`, checked against the repo databases' checksums. SteamOS is Arch-based, and on SteamOS 0.3.0 (build 20260922) these are the same versions the host has, except Mesa: SteamOS has Valve's own build (`deckard-mesa`), and the sysroot's is used only for gbm's headers and to link against libgbm, whose interface is stable. They provide headers and link-time libraries only; libc comes from zig's glibc 2.39 target.
