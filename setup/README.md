@@ -7,6 +7,7 @@ One-time setup for the Steam Frame itself: the `dev` build container and the Blu
 | `dev-container.sh` | The `dev` build container (Fedora 44 toolbox) with every package the projects need | No |
 | `bluetooth/install.sh` | Persistent fixes so Bluetooth LE mice and keyboards reconnect | Yes |
 | `pyside-venv.sh` | PySide6 on the host, so the settings apps run without the `dev` container (optional) | No |
+| `eyes-venv.sh` | NumPy and OpenCV on the host, so gaze mode's own eye tracker runs without the `dev` container (optional) | No |
 
 ## Build container
 
@@ -25,6 +26,14 @@ setup/pyside-venv.sh
 Frametop Display Settings and Frametop Input Settings are Python apps (PySide6 and Kirigami). The host has Qt 6 and Kirigami, because Plasma uses them, but no PySide6, so by default the apps run in the `dev` container. This script puts PySide6 on the host instead, in `~/.local/share/frametop/pyside`, and the apps' launchers use it whenever it's there. It needs [mise](https://mise.jdx.dev) in `~/.local/bin`, which provides Python 3.13 and uv.
 
 It installs PySide6-Essentials pinned to the host's exact Qt version (6.8.0 on SteamOS 0.3.0) and deletes the copy of Qt the wheel brings, so the bindings load the host's own Qt, the one Kirigami and the Breeze style are built against. SteamOS's Qt exports three QML engine functions under the symbol version `Qt_6` where PySide expects `Qt_6_PRIVATE_API`; `retag-versions.py` rewrites those three imports in `libpyside6qml`. Re-run it after a SteamOS update: it rebuilds only when the host's Qt version has changed, and `--force` rebuilds anyway. To go back to the container, delete `~/.local/share/frametop/pyside`.
+
+## Gaze mode's own tracker without the container
+
+```
+setup/eyes-venv.sh
+```
+
+Our own eye tracker, `gaze/tracker/ft-eyes` (used with `GAZE_TRACKER=own`), is Python with NumPy and OpenCV, which the host doesn't have, so by default the gaze service runs it in the `dev` container. This script installs the wheels `gaze/tracker/requirements.txt` pins into `~/.local/share/frametop/eyes` on the host, with Python 3.13 and uv from [mise](https://mise.jdx.dev), and the gaze service uses it whenever it's there. It rebuilds only when `requirements.txt` has changed, and `--force` rebuilds anyway. To go back to the container, delete `~/.local/share/frametop/eyes`. The frame grabber, `gaze/tracker/install.sh`, is separate and unchanged.
 
 ## Bluetooth LE mice and keyboards
 

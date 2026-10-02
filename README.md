@@ -158,7 +158,7 @@ By default, Frametop's native programs (ft-screens, the pointer helper, the powe
 
 Both builds can be on the Frame at once: the cross-compiled ones are in each folder's `build-cross/`, next to `build/`. `BINARIES=dev` or `BINARIES=cross` in `~/.config/frametop.conf` picks one, and `./install.sh --cross` sets it. To go back, set `BINARIES=dev` and run `./install.sh` again.
 
-With `--cross`, setting up the dev box is your choice, and the installer does it unless you say no or pass `--no-dev-box`. It's still what the remote desktop runs in, what gaze mode's own tracker (`gaze/tracker/ft-eyes`, Python with NumPy and OpenCV) runs in, what builds the programs on the Frame, and what runs the settings apps unless `setup/pyside-venv.sh` has set them up on the host. Without it, build the programs on a PC with `xbuild/build.sh` and copy them to the Frame first.
+With `--cross`, setting up the dev box is your choice, and the installer does it unless you say no or pass `--no-dev-box`. It's still what the remote desktop runs in, what gaze mode's own tracker (`gaze/tracker/ft-eyes`, Python with NumPy and OpenCV) runs in unless `setup/eyes-venv.sh` has set it up on the host, what builds the programs on the Frame, and what runs the settings apps unless `setup/pyside-venv.sh` has set them up on the host. Without it, build the programs on a PC with `xbuild/build.sh` and copy them to the Frame first.
 
 ## Uninstall
 

@@ -57,13 +57,14 @@ fi
 
 # Cross-compiled programs (xbuild/README.md): BINARIES=cross, set before the installers
 # below read it. The dev box is optional then, since nothing runs in it but the remote
-# desktop, gaze mode's own tracker, and the settings apps unless setup/pyside-venv.sh has run.
+# desktop, and gaze mode's own tracker and the settings apps unless setup/eyes-venv.sh and
+# setup/pyside-venv.sh have run.
 [ "$cross" = 1 ] || [ "$(frame_binaries)" = dev ] || cross=1
 if [ "$cross" = 1 ]; then
   on_frame "f=~/.config/frametop.conf; [ -f \$f ] || cp session/frametop.conf.example \$f
 sed -i 's/^BINARIES=[a-z]*/BINARIES=cross/' \$f; grep -q '^BINARIES=' \$f || echo 'BINARIES=cross' >> \$f"
   if [ -z "$dev_box" ]; then
-    ask "Set up the dev box on the Frame? It has the remote desktop tools (krdp, FreeRDP, TigerVNC) and gaze mode's own tracker, lets xbuild build there, and runs the settings apps unless setup/pyside-venv.sh has (1-2 GB)." y && dev_box=1 || dev_box=0
+    ask "Set up the dev box on the Frame? It has the remote desktop tools (krdp, FreeRDP, TigerVNC) and gaze mode's own tracker (unless setup/eyes-venv.sh has run), lets xbuild build there, and runs the settings apps unless setup/pyside-venv.sh has (1-2 GB)." y && dev_box=1 || dev_box=0
   fi
   echo "cross-compiled programs (BINARIES=cross in ~/.config/frametop.conf); dev box: $([ "$dev_box" = 1 ] && echo yes || echo no)"
 fi

@@ -119,6 +119,7 @@ ME = "\0ft_gazed"
 POINTER = "\0ft_pointer_helper"
 EYES_PROG = REPO / "gaze" / "tracker" / "ft-eyes"  # our own tracker
 EYES_PYTHON = REPO / "gaze" / "tracker" / "build" / "venv" / "bin" / "python"  # numpy, OpenCV (build.sh)
+EYES_HOST_PYTHON = Path.home() / ".local" / "share" / "frametop" / "eyes" / "bin" / "python"  # setup/eyes-venv.sh
 EYES_SOCKET = "\0ft_eyes"                      # its control socket
 EYES_CAMS = Path("/dev/shm/frametop-eyes-cams")  # the frames it reads (frametop-eyegrab.service)
 CONF = Path.home() / ".config" / "frametop.conf"
@@ -436,8 +437,18 @@ class Service:
         return (self.tracker == "own" and not self.override) or time.monotonic() < self.eyes_until
 
     def start_eyes(self):
-        """Our own tracker, in the dev container, with build/venv's numpy and OpenCV. Like
-        ft-gaze, it quits when its stdin closes."""
+        """Our own tracker, in the dev container, with build/venv's numpy and OpenCV, or on the
+        host once setup/eyes-venv.sh has set them up there. Like ft-gaze, it quits when its
+        stdin closes."""
+        if EYES_HOST_PYTHON.exists():
+            self.eyes_proc = subprocess.Popen([str(EYES_HOST_PYTHON), str(EYES_PROG), "-v", "--watch-stdin"],
+                                              stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                              stderr=subprocess.PIPE, start_new_session=True)
+            os.set_blocking(self.eyes_proc.stderr.fileno(), False)
+            self.sel.register(self.eyes_proc.stderr, selectors.EVENT_READ, "eyes")
+            log("ft-eyes started on the host" + ("" if EYES_CAMS.exists() else
+                                                 f": no {EYES_CAMS} yet (the frame grabber: gaze/tracker/install.sh)"))
+            return
         if not EYES_PYTHON.exists():
             log(f"ft-eyes isn't built: run {REPO}/gaze/tracker/build.sh")
             self.eyes_restart_at = time.monotonic() + 30
