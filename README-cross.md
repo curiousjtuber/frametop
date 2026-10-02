@@ -43,7 +43,16 @@ The programs were checked against the libraries SteamOS had when you installed t
 
 On a FAIL, delete `xbuild/build/` in the checkout and run `install-cross.sh` again, so the build takes Arch Linux ARM's current libraries, or switch to the dev box build. `setup/pyside-venv.sh` rebuilds the settings apps' Python environment when the host's Qt version has changed.
 
-### Back to the dev box build, or uninstall
+### Turning it off and on, back to the dev box build, or uninstall
+
+To turn Frametop off without deleting anything, for example to rule it out when a game misbehaves, and to turn it back on, from the install folder or a checkout:
+
+```
+./disable.sh   # removes the relay, the 3D mouse, the power and gaze services; the launcher opens the stock desktop
+./enable.sh    # puts them back from this folder (the gaze service if it was on); builds nothing
+```
+
+Both ask first whether to restart SteamVR at the end, which they need to take full effect.
 
 Both installs use the same services, menu entries and driver, so the one installed last is the one that runs. `./install.sh` from the checkout installs the dev box build over the cross one. To uninstall, run README.md's Uninstall commands from the install folder, then delete it.
 
