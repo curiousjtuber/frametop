@@ -2,6 +2,51 @@
 
 Frametop's native programs are normally built and run in the `dev` box, the Fedora container `setup/dev-container.sh` makes on the Frame (see README.md). The scripts here cross-compile them for the SteamOS host instead, so they run on the host directly, without the container. It's a separate set of scripts: the regular install doesn't use any of them.
 
+## Installing
+
+From a Frametop checkout (`git clone https://github.com/DeeJanuz/frametop.git ~/frametop`):
+
+```
+./install-cross.sh
+```
+
+It runs on the Frame, in a distrobox on the Frame, or on a PC, where it reaches the Frame over SSH (`$FRAME_HOST`, default `frame`). It builds the programs ([Building](#building)), copies Frametop with them into an install folder on the Frame, `~/.local/share/frametop/app` by default (`--prefix DIR` for another), checks them against the Frame's libraries ([The link check](#the-link-check)), and installs from that copy: the input relay, the 3D mouse driver and pointer helper, the power service, the multi-screen desktop, both settings apps, and, if you want them, gaze mode and the Bluetooth fixes. Afterwards the checkout isn't needed; to update, pull it and run `install-cross.sh` again. The install folder is replaced each time, so keep nothing of yours there.
+
+The copy is the checkout's files, with each program in its component's `build/`, where Frametop's own scripts look for it. Only the launchers that would start a program in the dev box differ: `cross/patches/` makes the session, the pointer and power services, the gaze service, check and probe, and the settings apps start them directly, and `cross/build.sh` stands in for each component's `build.sh`. A patch that no longer applies, after the file changed upstream, stops the install and says which; update it to match. Hand tracking (deferred) isn't copied.
+
+Its options are `install.sh`'s, plus:
+
+| Option | |
+| --- | --- |
+| `--prefix DIR` | the install folder on the Frame |
+| `--dev-box` | build in the dev box even when this machine has the tools |
+| `--no-gaze` | don't install gaze mode |
+| `--copy-only` | build, copy and check, but install nothing |
+
+The settings apps and gaze mode's own tracker run on the host's Python ([The Python apps on the host](#the-python-apps-on-the-host)). The frame grabber the own tracker needs is cross-compiled too; install it as usual, with `gaze/tracker/install.sh` from the install folder (it needs `sudo`).
+
+### What needs the dev box
+
+Only Remote Access, which uses Fedora's krdp, FreeRDP and TigerVNC from the box. `install-cross.sh` leaves it out. To add the dev box and Remote Access, run this on the Frame:
+
+```
+~/.local/share/frametop/app/install-cross-devbox.sh
+```
+
+### After a SteamOS update
+
+The programs were checked against the libraries SteamOS had when you installed them. After an update, check them again:
+
+```
+~/.local/share/frametop/app/xbuild/check.sh ~/.local/share/frametop/app build
+```
+
+On a FAIL, delete `xbuild/build/` in the checkout and run `install-cross.sh` again, so the build takes Arch Linux ARM's current libraries, or switch to the dev box build. `setup/pyside-venv.sh` rebuilds the settings apps' Python environment when the host's Qt version has changed.
+
+### Back to the dev box build, or uninstall
+
+Both installs use the same services, menu entries and driver, so the one installed last is the one that runs. `./install.sh` from the checkout installs the dev box build over the cross one. To uninstall, run README.md's Uninstall commands from the install folder, then delete it.
+
 ## Building
 
 ```

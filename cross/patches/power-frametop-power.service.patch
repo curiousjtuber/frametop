@@ -1,0 +1,22 @@
+--- a/power/frametop-power.service
++++ b/power/frametop-power.service
+@@ -7,17 +7,13 @@
+ PartOf=steamvr.service
+ 
+ [Service]
+-# Runs in the dev container (built there against its libraries). Start the container in a
+-# scope of its own first (see scripts/container-up.sh), and clean up the process explicitly
+-# around distrobox enter.
+-ExecStartPre=-@REPO@/scripts/container-up.sh
++# Cross-compiled for the host (README-cross.md).
+ ExecStartPre=-/usr/bin/pkill -x ft-powerd
+-ExecStart=%h/.local/bin/distrobox enter dev -- @REPO@/power/build/ft-powerd
++ExecStart=@REPO@/power/build/ft-powerd
+ # SIGTERM makes ft-powerd turn the displays back on before it exits.
+ ExecStopPost=-/usr/bin/pkill -x ft-powerd
+ Restart=on-failure
+ RestartSec=3
+-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
+ TimeoutStopSec=5
+ 
+ [Install]

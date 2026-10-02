@@ -142,6 +142,10 @@ cd ~/frametop && scripts/report.sh
 
 This writes `frametop-report-<date>.txt` with version numbers, service states, settings, and recent logs. Bluetooth addresses and the headset's serial number are masked. Then [open an issue](https://github.com/DeeJanuz/frametop/issues), describe what you did, what you expected, and what happened, and attach the file. Quick questions can go to [Discord](https://discord.gg/W3X9f7z3Bc) instead.
 
+### Without the dev box
+
+`install-cross.sh` installs Frametop with its programs cross-compiled for the SteamOS host instead, so they run without the Fedora container, built on the Frame or on a PC. See [README-cross.md](README-cross.md).
+
 ## Update
 
 Run the same command again. It updates `~/frametop` to the latest of the version you have (or switches, if you pick the other one) and installs it:
