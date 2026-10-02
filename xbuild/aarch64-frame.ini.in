@@ -1,0 +1,24 @@
+# Meson cross file: Steam Frame host (aarch64, glibc 2.39), zig as the toolchain,
+# Arch Linux ARM packages unpacked in xbuild/build/alarm/sysroot (see sysroot.sh) for
+# everything but libc. wlroots.sh fills in @SYSROOT@.
+[binaries]
+c = ['zig', 'cc', '-target', 'aarch64-linux-gnu.2.39']
+cpp = ['zig', 'c++', '-target', 'aarch64-linux-gnu.2.39']
+ar = ['zig', 'ar']
+ranlib = ['zig', 'ranlib']
+pkg-config = 'pkgconf'
+
+[built-in options]
+# pkgconf drops /usr/include and /usr/lib as system dirs, sysroot or not, so add them here.
+c_args = ['-I@SYSROOT@/usr/include']
+c_link_args = ['-L@SYSROOT@/usr/lib']
+
+[properties]
+sys_root = '@SYSROOT@'
+pkg_config_libdir = ['@SYSROOT@/usr/lib/pkgconfig', '@SYSROOT@/usr/share/pkgconfig']
+
+[host_machine]
+system = 'linux'
+cpu_family = 'aarch64'
+cpu = 'aarch64'
+endian = 'little'

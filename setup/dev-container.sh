@@ -3,11 +3,13 @@
 # aarch64, via distrobox). Safe to re-run: it only creates what's missing and dnf
 # skips installed packages. This package list is the source of truth for rebuilding
 # the container.
-# Usage: setup/dev-container.sh   (on the Frame, or from a PC over SSH)
-# Needs distrobox in ~/.local/bin on the Frame (see the top-level README).
+# Usage: setup/dev-container.sh [--local]   (on the Frame, or from a PC over SSH)
+#   --local   on this machine instead, whatever it is: xbuild/ builds in the same container
+# Needs distrobox in ~/.local/bin on the Frame (see the top-level README), or on PATH.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+[ "${1:-}" = --local ] && export FRAME_LOCAL=1  # _env.sh: run everything here
 . "$root/scripts/_env.sh"
 
 packages=(
@@ -36,7 +38,8 @@ set -euo pipefail
 repo=$1
 shift
 distrobox=$HOME/.local/bin/distrobox
-[ -x "$distrobox" ] || { echo "distrobox not found at $distrobox (see the top-level README)" >&2; exit 1; }
+[ -x "$distrobox" ] || distrobox=$(command -v distrobox) ||
+  { echo "distrobox not found at $distrobox (see the top-level README)" >&2; exit 1; }
 if ! podman container exists dev; then
   echo "creating the dev container (Fedora 44 toolbox)"
   "$distrobox" create --yes --name dev --image registry.fedoraproject.org/fedora-toolbox:44
@@ -55,7 +58,8 @@ echo "installing ${#@} packages (already-installed ones are skipped)"
 sudo dnf install -y -q "$@" 2>&1 | { grep -vE "is already installed|^Nothing to do|^$" || true; } ||
   rpm -q "$@" > /dev/null
 # OpenVR programs built here (the pointer helper and probe) look for the runtime at /opt/steamvr.
-[ -e /opt/steamvr ] || sudo ln -s /run/host/opt/steamvr /opt/steamvr
+# (On a PC the host has no SteamVR, and the link points nowhere: -L, or a re-run fails.)
+[ -e /opt/steamvr ] || [ -L /opt/steamvr ] || sudo ln -s /run/host/opt/steamvr /opt/steamvr
 echo "dev container ready: $(. /etc/os-release; echo $PRETTY_NAME), glibc $(ldd --version | head -1 | grep -oE "[0-9.]+$")"
 ' dev "$@"
 EOF

@@ -1,4 +1,5 @@
 build/
+build-cross/
 target/
 .env
 .env.*

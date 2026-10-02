@@ -14,5 +14,5 @@ fi
 
 exec rsync -az --delete --info=stats1 \
   --filter=':- .gitignore' \
-  --exclude='.git' --exclude='target/' --exclude='build/' --exclude='.env' --exclude='.env.*' \
+  --exclude='.git' --exclude='target/' --exclude='build/' --exclude='build-cross/' --exclude='.env' --exclude='.env.*' \
   "$@" "$root/" "$FRAME_HOST:${FRAME_REPO#/home/steamos/}/"
