@@ -94,6 +94,8 @@ if [ "$cross" = 1 ]; then
     echo "no cross-compiled programs here: build them on a PC with xbuild/build.sh and copy build-cross/ (xbuild/README.md), or run ./install.sh --cross with the dev box" >&2
     exit 1
   fi
+  # Against the Frame's own libraries, before anything is installed (xbuild/check.sh).
+  "$root/xbuild/check.sh"
 else
 step "2/9 build container (Fedora 44 'dev', about 1-2 GB the first time)"
 "$root/setup/dev-container.sh"

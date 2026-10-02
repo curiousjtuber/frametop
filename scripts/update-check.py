@@ -35,6 +35,11 @@ VRPATHS = os.path.join(HOME, ".config/openvr/openvrpaths.vrpath")
 BACKLIGHT = "/sys/class/backlight/ae94000.dsi.0/brightness"  # as in power/ft-powerd.cpp
 EYE_MMAP = "/dev/shm/eye-server.mmap"
 HOST_GLIBC = (2, 39)  # the newest the pointer driver may need (pointer/driver/build.sh)
+CONF = os.path.join(HOME, ".config/frametop.conf")
+HOST_LOADER = "/lib/ld-linux-aarch64.so.1"
+DRIVER = os.path.join(HOME, ".local/share/frametop/ft_pointer/bin/linuxarm64/driver_ft_pointer.so")
+PYSIDE_VENV = os.path.join(HOME, ".local/share/frametop/pyside")  # setup/pyside-venv.sh
+EYES_VENV = os.path.join(HOME, ".local/share/frametop/eyes")  # setup/eyes-venv.sh
 
 # Packages in the OS image that Frametop depends on, and what to try by hand when one changes.
 PACKAGES = {
@@ -221,6 +226,20 @@ def check_host():
             report("FAIL", "backlight", f"{BACKLIGHT} isn't writable, so ft-powerd can't turn the displays off")
 
 
+def binaries():
+    """BINARIES in frametop.conf: "dev" (built and run in the dev container, the default) or
+    "cross" (xbuild/build.sh's build-cross/, run on the host)."""
+    value = "dev"
+    try:
+        with open(CONF) as f:
+            for line in f:
+                if line.startswith("BINARIES="):
+                    value = line.split("=", 1)[1].split("#", 1)[0].strip()
+    except OSError:
+        pass
+    return "cross" if value == "cross" else "dev"
+
+
 def launcher_session():
     try:
         with open(LAUNCHER) as f:
@@ -230,11 +249,67 @@ def launcher_session():
     return m.group(1) if m else None
 
 
+def check_cross_libs():
+    """BINARIES=cross: the cross-compiled programs run on the host's own libraries, which an
+    update replaces. The dynamic loader resolves each one, every library and symbol version,
+    without running it (xbuild/check.sh does the same after a build)."""
+    if binaries() != "cross":
+        return
+    paths = sorted(installed_binaries()) + ([DRIVER] if os.path.isfile(DRIVER) else [])
+    if not paths:
+        report("skip", "cross-compiled programs", "none installed")
+        return
+    env = dict(os.environ, LD_TRACE_LOADED_OBJECTS="1", LD_BIND_NOW="1", LD_WARN="1")
+    gaps = {}
+    for path in paths:
+        try:
+            p = subprocess.run([HOST_LOADER, path], capture_output=True, text=True, timeout=15, env=env)
+            out = p.stdout + p.stderr
+        except (OSError, subprocess.TimeoutExpired) as e:
+            out = f"not found: {e}"
+        lines = [line.strip() for line in out.splitlines()
+                 if re.search(r"not found|undefined symbol|version .* not found", line)]
+        if lines:
+            gaps[os.path.basename(path)] = lines
+    for name, lines in gaps.items():
+        report("FAIL", f"{name} on this SteamOS", f"{'; '.join(lines[:3])}; rebuild it (xbuild/build.sh)")
+    if not gaps:
+        report("ok", "cross-compiled programs", f"all {len(paths)} load against this SteamOS's libraries")
+
+
+def check_venvs():
+    """The host venvs (setup/pyside-venv.sh, setup/eyes-venv.sh): PySide6 there is pinned to
+    the host's exact Qt, which an update can move, and both use the host's glibc."""
+    if os.path.isdir(PYSIDE_VENV):
+        code, out = run("pacman", "-Q", "qt6-base")
+        qt = out.split()[1].split("-")[0] if code == 0 and len(out.split()) > 1 else "?"
+        try:
+            with open(os.path.join(PYSIDE_VENV, "frametop-version")) as f:
+                built = f.read().split()
+        except OSError:
+            built = []
+        built_qt = built[1] if len(built) > 1 and built[0] == "qt" else "?"
+        if built_qt != qt:
+            report("FAIL", "settings apps' PySide6", f"built for Qt {built_qt}, the host has {qt}: "
+                   "run setup/pyside-venv.sh")
+        else:
+            code, _ = run(os.path.join(PYSIDE_VENV, "bin/frametop-python"), "-c",
+                          "from PySide6.QtQml import QQmlApplicationEngine",
+                          env=dict(os.environ, QT_QPA_PLATFORM="offscreen"))
+            report("ok" if code == 0 else "FAIL", "settings apps' PySide6",
+                   f"for Qt {qt}" if code == 0 else "doesn't load: run setup/pyside-venv.sh --force")
+    if os.path.isdir(EYES_VENV):
+        code, _ = run(os.path.join(EYES_VENV, "bin/python"), "-c", "import numpy, cv2")
+        report("ok" if code == 0 else "FAIL", "own eye tracker's numpy and OpenCV",
+               "load" if code == 0 else "don't load: run setup/eyes-venv.sh --force")
+
+
 # --- with SteamVR running
 
 def installed_binaries():
     """The programs the services and the launcher run: {path: what runs it}."""
     found = {}
+    out = "build-cross" if binaries() == "cross" else "build"
     for unit in UNITS:
         argv = re.search(r"argv\[\]=([^;]*)", systemctl("show", "-p", "ExecStart", "--value", unit + ".service"))
         for arg in (argv.group(1).split() if argv else []):
@@ -244,14 +319,14 @@ def installed_binaries():
                 found[arg] = unit
             else:
                 # A script runs the programs built next to it (ft-gazed runs build/ft-gaze).
-                build = os.path.join(os.path.dirname(arg), "build")
+                build = os.path.join(os.path.dirname(arg), out)
                 for name in sorted(os.listdir(build)) if os.path.isdir(build) else []:
                     if is_elf(os.path.join(build, name)):
                         found[os.path.join(build, name)] = unit
     session = launcher_session()
     if session:
         screens = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(session)),
-                                                "../screens/build/ft-screens"))
+                                                f"../screens/{out}/ft-screens"))
         if os.path.isfile(screens):
             found[screens] = "the desktop"
     return found
@@ -360,6 +435,8 @@ def main():
     versions = current_versions()
     check_versions(versions)
     check_host()
+    check_cross_libs()
+    check_venvs()
     steamvr_up = run("pgrep", "-x", "vrserver")[0] == 0
     if not steamvr_up:
         report("skip", "SteamVR checks", "SteamVR isn't running")

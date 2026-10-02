@@ -160,6 +160,8 @@ Both builds can be on the Frame at once: the cross-compiled ones are in each fol
 
 With `--cross`, setting up the dev box is your choice, and the installer does it unless you say no or pass `--no-dev-box`. It's still what the remote desktop runs in, what gaze mode's own tracker (`gaze/tracker/ft-eyes`, Python with NumPy and OpenCV) runs in unless `setup/eyes-venv.sh` has set it up on the host, what builds the programs on the Frame, and what runs the settings apps unless `setup/pyside-venv.sh` has set them up on the host. Without it, build the programs on a PC with `xbuild/build.sh` and copy them to the Frame first.
 
+The cross-compiled programs use the host's own libraries, which a SteamOS update replaces, where the container's builds keep the box's. `scripts/update-check.py` checks them after an update: every program must still load against the new libraries, and the settings apps' PySide6 must still match the host's Qt.
+
 ## Uninstall
 
 To turn Frametop off without deleting anything, for example to rule it out when a game misbehaves, and to turn it back on:

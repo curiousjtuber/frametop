@@ -20,8 +20,15 @@ if [ -z "$box" ]; then
   distrobox=$HOME/.local/bin/distrobox
   [ -x "$distrobox" ] || distrobox=$(command -v distrobox)
   # podman needs the real runtime dir and user bus, also from a nested desktop's terminal.
-  exec env XDG_RUNTIME_DIR="/run/user/$(id -u)" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus" \
+  env XDG_RUNTIME_DIR="/run/user/$(id -u)" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus" \
     "$distrobox" enter dev -- "$here/build.sh" "$@"
+  # The box's own libraries say nothing about the host's: check against those, here.
+  if grep -qx 'ID=steamos' /etc/os-release && grep -qE '^VARIANT_ID="?vr"?$' /etc/os-release; then
+    "$here/check.sh"
+  else
+    echo "built here; after copying them to the Frame, check them there with xbuild/check.sh"
+  fi
+  exit
 fi
 [ "$box" = dev ] || { echo "run xbuild/build.sh on the host or in the dev box, not in $box" >&2; exit 1; }
 
