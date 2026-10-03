@@ -81,15 +81,17 @@ def write_conf_value(key, value):
 
 
 def host_command(*cmd):
-    """argv to run a command on the SteamOS host (we live in the dev container).
+    """argv to run a command with the user's real runtime dir and session bus.
 
-    distrobox-host-exec reaches the host through the user's real session bus; inside the
-    desktop our DBUS_SESSION_BUS_ADDRESS is the nested session's private one, where it
-    fails (exit 127, silently)."""
-    if not shutil.which("distrobox-host-exec"):
-        return list(cmd)
-    bus = f"unix:path=/run/user/{os.getuid()}/bus"
-    return ["env", f"DBUS_SESSION_BUS_ADDRESS={bus}", "distrobox-host-exec"] + list(cmd)
+    Inside the desktop, XDG_RUNTIME_DIR is the nested session's folder and
+    DBUS_SESSION_BUS_ADDRESS its private bus (session/frametop-session.sh), and there
+    systemd-run and systemctl --user find no manager ("Failed to connect to user scope bus
+    via local transport"). In the dev container, distrobox-host-exec needs that bus too."""
+    runtime = f"/run/user/{os.getuid()}"
+    argv = ["env", f"XDG_RUNTIME_DIR={runtime}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={runtime}/bus"]
+    if shutil.which("distrobox-host-exec"):
+        argv.append("distrobox-host-exec")
+    return argv + list(cmd)
 
 
 class Backend(QObject):

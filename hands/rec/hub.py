@@ -2,8 +2,8 @@
 """Upload a hand recorder export to the hand dataset on Hugging Face (DESIGN.md "Upload").
 
 The window runs this as a child process (so Cancel can end it, and huggingface_hub stays out
-of the window's process); it also runs from the command line. It uses huggingface_hub (in the
-dev container: python3-huggingface-hub, from setup/dev-container.sh) with the login that
+of the window's process); it also runs from the command line. It uses huggingface_hub (hands/build/venv,
+from hands/build.sh; the window runs this with that Python) with the login that
 `hub.py login` (the window's Log in) or `hf auth login` saved. Nobody types a token anywhere.
 
 `login` is huggingface_hub's browser login (OAuth device code, as `hf auth login` does): it gets a
@@ -195,8 +195,8 @@ def _hf():
     try:
         import huggingface_hub
     except ImportError:
-        raise HubError("missing", "huggingface_hub isn't installed in the dev container: run setup/dev-container.sh "
-                                  "(or: pip install --user huggingface_hub)") from None
+        raise HubError("missing", "huggingface_hub isn't installed: run hands/build.sh (it goes in hands/build/venv) "
+                                  "or pip install huggingface_hub for this Python") from None
     return huggingface_hub
 
 
@@ -262,8 +262,8 @@ def login(progress=None):
         from huggingface_hub.errors import DeviceCodeError
         from huggingface_hub.utils._oauth_device import poll_device_token, request_device_code
     except ImportError:
-        raise HubError("missing", "This huggingface_hub has no browser login: update the dev container "
-                                  "(setup/dev-container.sh).") from None
+        raise HubError("missing", "This huggingface_hub has no browser login (it needs 1.x): run hands/build.sh "
+                                  "again.") from None
     try:
         info = request_device_code()
         tell("code", "Approve the login in your browser", url=info["verification_uri_complete"],

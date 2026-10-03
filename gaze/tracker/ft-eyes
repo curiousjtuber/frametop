@@ -8,10 +8,10 @@ slip estimate (eyes_model.py), and publishes the result in /dev/shm/frametop-eye
 where ft-gaze reads it as the source "own". It touches /dev/shm/frametop-eyes-want every
 second, and ft-eyegrab copies frames only while someone does.
 
-The gaze service (gaze/ft-gazed) runs it in the dev container, with --watch-stdin (it quits
+The gaze service (gaze/ft-gazed) runs it on the host, with --watch-stdin (it quits
 when its stdin closes), while Eye tracker is Own tracker or the gaze probe uses it. The
 probe calibrates and teaches it; the gaze pointer's nudges reach it as clicks, from ft-gazed.
-By hand: distrobox enter dev -- python3 gaze/tracker/ft-eyes -v
+By hand: gaze/tracker/build/venv/bin/python gaze/tracker/ft-eyes -v
 
 Calibration: ~/.local/state/frametop/gaze/eyes/calibration.json, made by the gaze probe's
 calibration with the tracker toggle on Own tracker (or lab/ft-eyes-score --save CAPTURE).
@@ -407,8 +407,7 @@ def main():
     below_steamvr()
     verbose = "-v" in sys.argv
     if "--watch-stdin" in sys.argv:
-        # Run by ft-gazed through distrobox, which doesn't pass a stop on: quit when our
-        # stdin (its pipe) closes.
+        # Run by ft-gazed: quit when our stdin (its pipe) closes, even if it's killed.
         def watch():
             while sys.stdin.buffer.read(4096):
                 pass

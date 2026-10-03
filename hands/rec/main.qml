@@ -1370,7 +1370,7 @@ Kirigami.ApplicationWindow {
                     visible: !backend.zstdFound
                     position: Kirigami.InlineMessage.Position.Header
                     type: Kirigami.MessageType.Error
-                    text: "zstd isn't installed in the dev container, so nothing can be exported. Run setup/dev-container.sh."
+                    text: "zstd isn't installed, so nothing can be exported. SteamOS ships it as /usr/bin/zstd."
                 }
             }
 

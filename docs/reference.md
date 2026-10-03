@@ -14,7 +14,7 @@ desktops.sh uninstall      # back to the stock SteamOS desktop
 desktops.sh start | stop | restart | status | log [lines]
 ```
 
-`session/frametop-session.sh` runs the desktop. It starts ft-screens in the `dev` container (log: `/tmp/frametop-screens.log`), then KWin and Plasma on the host inside it. Only one desktop runs at a time. `desktops.sh start` runs it in its own systemd unit, `frametop-desktop`. It keeps its Plasma config in `~/.config/frametop`, separate from the stock desktop's.
+`session/frametop-session.sh` runs the desktop. It starts ft-screens (log: `/tmp/frametop-screens.log`), then KWin and Plasma inside it. Only one desktop runs at a time. `desktops.sh start` runs it in its own systemd unit, `frametop-desktop`. It keeps its Plasma config in `~/.config/frametop`, separate from the stock desktop's.
 
 When the VR launcher starts the desktop, it inherits the Steam client's environment. The session script drops the client's runtime from it (`LD_LIBRARY_PATH`, the `STEAM_*` settings, and the Steam overlay's Vulkan layer), so apps in the desktop use the system's libraries, including its video codecs, just as they would after a normal login.
 
@@ -112,7 +112,7 @@ The first time, the relay has to start before SteamVR, so reboot or restart Stea
 A mouse drives SteamVR the way a controller's laser does, but shows up as a small dot anchored in the room. It snaps onto panels and works on the dashboard, Steam, overlays, and the desktop. Three pieces make it work:
 
 - The input relay, in pointer mode (`POINTER=1`), sends mouse motion, clicks, and scrolling to the helper. A deliberate movement or a click wakes the pointer, and 30 seconds without mouse input releases it.
-- The helper, `pointer/helper/ft-pointer`, runs in the `dev` container as `frametop-pointer.service` and starts with SteamVR. It keeps the cursor, tests it against every visible overlay, draws the dot, and sends the driver an exact pose.
+- The helper, `pointer/helper/ft-pointer`, runs as `frametop-pointer.service` and starts with SteamVR. It keeps the cursor, tests it against every visible overlay, draws the dot, and sends the driver an exact pose.
 - The driver, `pointer/driver/` (`ft_pointer`), is loaded by SteamVR. It's an invisible virtual right-hand controller whose laser follows the cursor.
 
 Whichever device you used last wins. Picking up a controller hands the laser back at once, and moving the mouse takes it again. When the headset comes off, the pointer lets go, so the displays can sleep, and it stays off until you're wearing the headset again.
@@ -130,7 +130,7 @@ The pointer settings are in `~/.config/frametop.conf`: `POINTER_SENSITIVITY`, `P
 
 ## Frametop Input Settings
 
-A Kirigami app with a Python backend, in the Plasma menu under Settings. It runs in the `dev` container and talks to the relay over its control socket, `@frametop_relay`. It has nine pages:
+A Kirigami app with a Python backend, in the Plasma menu under Settings. It runs with PySide6 from `setup/pyside-venv.sh` and talks to the relay over its control socket, `@frametop_relay`. It has nine pages:
 
 - Devices lists every USB and Bluetooth mouse and keyboard, with a light that flashes when the device is used. Each device gets a role: 3D pointer (grabbed, drives the pointer; the default for anything with a mouse), Pass through (grabbed only while typing goes to the desktop; the default for keyboards, whose key combinations work everywhere), or Ignore. A device is identified by its Bluetooth address, or its USB ids and name, so all of its input nodes share one role. Forget drops everything saved for a device.
 - Buttons maps a pointer device's buttons. Choose Capture a button, press the button or key, then pick an action: a click, back, scroll, toggle dashboard, recenter, pointer on or off, head follow on or off, gaze pointer on or off, gaze precision, gaze drag, gaze quick check, faster or slower, reset the screen layout, hide or show the screens, open or close the keyboard, float a window in VR or put it back, put all floating windows back, pause or resume Frametop ([Pausing for VR games](#pausing-for-vr-games)), Open profile NAME (one per profile, [profiles.md](profiles.md)), pass the key through, or nothing. Devices with saved mappings are listed even while they're asleep.
@@ -199,7 +199,7 @@ float/ft-float list                   # the spare outputs and what floats on the
 
 SteamVR turns the displays off a few seconds after the headset's proximity sensor says it came off. A stand or display mount that covers the sensor makes the headset seem worn, so its displays stay on, and Steam, which then counts someone as present, never puts it to sleep either.
 
-`power/ft-powerd` goes by use instead. It runs in the `dev` container as `frametop-power.service` and starts with SteamVR. Once the headset has gone unused for `DISPLAY_OFF_MIN` minutes (0, the default, is never), it turns the displays' backlight off, and it turns it back on at the next use. Use is any of these:
+`power/ft-powerd` goes by use instead. It runs as `frametop-power.service` and starts with SteamVR. Once the headset has gone unused for `DISPLAY_OFF_MIN` minutes (0, the default, is never), it turns the displays' backlight off, and it turns it back on at the next use. Use is any of these:
 
 - The headset, a Frame controller, or the 3D mouse's virtual controller moving more than `DISPLAY_MOVE_MM` (5 mm) or turning more than `DISPLAY_MOVE_DEG` (0.5 degrees) within 10 seconds.
 - A key, button, or mouse motion on any input device on the host, including the headset's own buttons and the input relay's virtual mouse and keyboard.
@@ -261,7 +261,7 @@ Deferred: it costs a lot of the headset's CPU and needs more work, so `install.s
 Your hands show over the screens: where a tracked hand is between an eye and a screen, ft-screens lets that eye see the room through the screen. The same tracker detects pinches and grips, and with `POINTER_HANDS=1` in `~/.config/frametop.conf` they work the pointer. In gaze mode a pinch clicks where you look when it opens; hold it and move the hand to correct the pointer first. Without gaze mode a pinch is a press like the mouse's button, so a held pinch drags. A grip (closing the hand) presses and drags. To install it: `hands/run.sh install`.
 
 - `ft-camd` borrows XRService's camera buffers and publishes the four IR tracking cameras to `/run/user/UID/frametop-hands/cam-ring`. It runs on the host as `frametop-camd.service`, with file capabilities that `hands/run.sh install` sets through sudo, and it drops them once set up. A rebuild clears them: `hands/run.sh caps`.
-- `ft-hands` runs in the `dev` container as `frametop-hands.service`. It finds and triangulates the hands, and publishes `hands` (read by ft-screens' cutouts) and `gestures` (pinches and grips, read by the pointer helper) next to the ring.
+- `ft-hands` runs on the host as `frametop-hands.service`. It finds and triangulates the hands, and publishes `hands` (read by ft-screens' cutouts) and `gestures` (pinches and grips, read by the pointer helper) next to the ring.
 - The install leaves both off, and they don't start with SteamVR. `ft-handsctl on` starts them while SteamVR runs, and `ft-handsctl off` stops them; they also stop with SteamVR. The install links `ft-handsctl` into `~/.local/bin`. `ft-handsctl status` and `ft-handsctl log` (or `hands/run.sh status` and `log`) show how they're doing, `ft-handsctl cutouts on|off` turns just the cutouts off, and `ft-handsctl gestures` shows pinches and grips live.
 - Settings in `~/.config/frametop.conf`: `HANDS_SWAP_SIDES` (`auto`, the default: ft-hands tells from the hands when some SteamVR restart has swapped the side cameras' names, and fixes them; `0` or `1` force them, and `hands/tools/check_sides.py --ring` tells which is right), `HANDS_CPUS`, the cameras it tracks with (`HANDS_CAMERAS`, `HANDS_BRIGHT`, `HANDS_BRIGHT_ON`, `HANDS_BRIGHT_OFF`, `HANDS_COLOR_LEFT`, `HANDS_COLOR_CROP`), and the pointer helper's `POINTER_HANDS`, `POINTER_PINCH_GAIN`, `POINTER_PINCH_DEADZONE`, `POINTER_GRIP_GAIN`, `POINTER_GRIP_BELOW`, and `POINTER_PINCH_TYPING`. The example config explains each.
 

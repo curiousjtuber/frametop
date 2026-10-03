@@ -74,7 +74,7 @@
 // picture's text goes to stdout instead (and with --dump DIR, the pictures to DIR/panel.pam
 // and DIR/target.pam), "poses start" writes nothing, "devices" and "head" reply with an error,
 // and "target" places the point as if the headset were at the room's origin.
-// Runs in the dev container (hands/rec/build.sh builds it into hands/rec/build).
+// Runs on the Frame host (hands/rec/build.sh builds it into hands/rec/build).
 #include <openvr.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION

@@ -93,15 +93,10 @@ class Camera:
 
 
 def device_path(path):
-    """A headset file such as /persist/xrservice.json. In the dev container the host's / is
-    at /run/host (distrobox doesn't mount /persist); off the Frame, FRAME_JOB_DEVICE_ROOT can
-    point at a folder with copies of them."""
+    """A headset file such as /persist/xrservice.json. Off the Frame, FRAME_JOB_DEVICE_ROOT
+    can point at a folder with copies of them."""
     root = os.environ.get('FRAME_JOB_DEVICE_ROOT')
-    if root:
-        return root + path
-    if not os.access(path, os.R_OK) and os.access('/run/host' + path, os.R_OK):
-        return '/run/host' + path
-    return path
+    return root + path if root else path
 
 
 def load(xrservice=XRSERVICE_JSON, device=DEVICE_JSON):

@@ -1,19 +1,28 @@
 # setup
 
-One-time setup for the Steam Frame itself: the `dev` build container and the Bluetooth fixes. `install.sh` runs both, so you only need this page for details, doing a step on its own, or troubleshooting. Run the scripts from the repo root, either in a terminal on the Frame (the usual way) or from a PC over SSH (see "Developing from a PC" in the README).
+One-time setup for the Steam Frame itself: the settings apps' Python environment, the optional `dev` container, and the Bluetooth fixes. `install.sh` runs them, so you only need this page for details, doing a step on its own, or troubleshooting. Run the scripts from the repo root, either in a terminal on the Frame (the usual way) or from a PC over SSH (see "Developing from a PC" in the README).
 
 | Script | What it sets up | Needs host `sudo` |
 | --- | --- | --- |
-| `dev-container.sh` | The `dev` build container (Fedora 44 toolbox) with every package the projects need | No |
+| `pyside-venv.sh` | PySide6 on the host's own Qt, for Frametop Display Settings and Frametop Input Settings | No |
+| `dev-container.sh` | The optional `dev` container (Fedora 44 toolbox), for Remote Access | No |
 | `bluetooth/install.sh` | Persistent fixes so Bluetooth LE mice and keyboards reconnect | Yes |
 
-## Build container
+## Settings apps' Python environment
+
+```
+setup/pyside-venv.sh
+```
+
+Frametop Display Settings and Frametop Input Settings are Python apps (PySide6 and Kirigami). The host has Qt 6 and Kirigami, because Plasma uses them, but no PySide6. This makes a venv of the host's Python in `build/pyside` with PySide6-Essentials pinned to the host's exact Qt version, and deletes the copy of Qt the wheel brings, so the bindings load the host's own Qt, the one Kirigami and the Breeze style are built against. SteamOS's Qt exports a few QML engine functions under the symbol version `Qt_6` where PySide expects `Qt_6_PRIVATE_API`; the script retags those imports in `libpyside6qml`. Re-run it after a SteamOS update: it rebuilds only when the host's Qt or Python version has changed, and `--force` rebuilds anyway.
+
+## Dev container
 
 ```
 setup/dev-container.sh
 ```
 
-It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
+Only Remote Access (Fedora's krdp, FreeRDP and TigerVNC) needs it; `install.sh` asks. It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
 
 ## Bluetooth LE mice and keyboards
 

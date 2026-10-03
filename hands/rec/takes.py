@@ -50,7 +50,7 @@ EXPORT_SCHEMA = 1
 # zstd as DESIGN.md has it: level 10, two threads, at the lowest CPU priority (CPU work while
 # someone is in VR makes the headset stutter).
 ZSTD_ARGS = ["-10", "-T2", "-q", "-c"]
-ZSTD_PATHS = ("/usr/bin/zstd", "/usr/local/bin/zstd", "/run/host/usr/bin/zstd")
+ZSTD_PATHS = ("/usr/bin/zstd", "/usr/local/bin/zstd")
 CHUNK = 1 << 20
 
 
@@ -76,7 +76,7 @@ def write_json(path, obj):
 
 
 def find_zstd():
-    """The zstd binary, or None. The dev container gets it from setup/dev-container.sh."""
+    """The zstd binary, or None. SteamOS ships it (/usr/bin/zstd)."""
     found = shutil.which("zstd")
     if found:
         return found
@@ -471,7 +471,7 @@ class Store:
         low_priority: run this thread at nice 19 as well as zstd (Linux nice is per thread)."""
         zstd = find_zstd()
         if not zstd:
-            raise RuntimeError("zstd isn't installed (in the dev container: sudo dnf install zstd)")
+            raise RuntimeError("zstd isn't installed (SteamOS ships /usr/bin/zstd)")
         cancelled = getattr(cancel, "is_set", cancel) or (lambda: False)
         report = progress or (lambda fraction, text: None)
         src = self.session_dir(session)

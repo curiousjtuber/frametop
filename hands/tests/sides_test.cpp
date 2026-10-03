@@ -1,5 +1,5 @@
 // Unit tests for the side cameras' naming check (track/sides.h), on made-up cameras and a
-// made-up hand: no models, no recordings. make check (in the dev container) builds and runs it.
+// made-up hand: no models, no recordings. make check builds and runs it.
 #include "../track/sides.h"
 
 #include <cstdio>

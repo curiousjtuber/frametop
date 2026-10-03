@@ -9,7 +9,7 @@ panel's poses.jsonl. The headset panel (ft-handpanel) shows the prompts; the liv
 gives feedback ("I can't see your left hand").
 
 Plain Python, standard library only: ft_handrec.py imports it, and it runs from the command line
-for testing (in the dev container):
+for testing:
 
   python3 hands/rec/session.py --dry-run --speed 20 --next-after 0.2   # no processes: prints the panel commands
   python3 hands/rec/session.py --ring /tmp/ring --base /tmp/hr        # ft-ringplay's frames, no headset needed
@@ -59,6 +59,8 @@ POSES_DIR = os.path.join(HERE, "poses")   # the pose pictures: poses.json and it
 BASE_DIR = os.path.expanduser("~/.local/share/frametop/hands/contrib")
 PANEL_SOCKET = "ft_handpanel"
 CAMD_UNIT = "frametop-handrec-camd.service"
+XRSERVICE_JSON = "/persist/xrservice.json"       # the factory calibration (session calibration.json)
+DEVICE_CONFIG = "/persist/device_config.json"    # the rig's pose in the CAD frame (device.json)
 HANDS_UNIT = "frametop-handrec-hands.service"
 
 RECORD_HZ = 10
@@ -113,30 +115,6 @@ def clock_sample():
 
 def run_dir():
     return "/run/user/%d/frametop-hands" % os.getuid()
-
-
-def in_container():
-    return os.path.exists("/run/.containerenv") or os.path.exists("/.dockerenv")
-
-
-def host_command(*cmd):
-    """argv to run a command on the SteamOS host from the dev container (as in
-    display-settings: distrobox-host-exec needs the user's real session bus). It runs from the
-    home folder: host-spawn starts the command in the caller's folder, and a container-only
-    one such as /run/host/tmp doesn't exist on the host (every command then exits 127)."""
-    exe = shutil.which("distrobox-host-exec")
-    if not in_container() or not exe:
-        return list(cmd)
-    return ["env", "-C", os.path.expanduser("~"), "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%d/bus" % os.getuid(),
-            exe] + list(cmd)
-
-
-def host_path(path):
-    """A host file, from the container (/run/host) or the host itself."""
-    for p in ("/run/host" + path, path):
-        if os.path.exists(p):
-            return p
-    return None
 
 
 def write_json(path, data):
@@ -327,9 +305,18 @@ def lighting_record(choice, ring):
             "measured": measured, "ambient_ir": ambient_ir(ring), "ring": ring or {}}
 
 
+def user_env():
+    """Environment for systemctl --user and systemd-run: the user's real runtime dir and
+    session bus. Inside the Frametop desktop both are the nested session's (its own folder, a
+    private bus from dbus-run-session), where systemd's tools find no manager and fail with
+    "Failed to connect to user scope bus"."""
+    runtime = "/run/user/%d" % os.getuid()
+    return dict(os.environ, XDG_RUNTIME_DIR=runtime, DBUS_SESSION_BUS_ADDRESS="unix:path=%s/bus" % runtime)
+
+
 def unit_active(unit):
-    return subprocess.run(host_command("systemctl", "--user", "-q", "is-active", unit),
-                          capture_output=True, timeout=30).returncode == 0
+    return subprocess.run(["systemctl", "--user", "-q", "is-active", unit],
+                          capture_output=True, timeout=30, env=user_env()).returncode == 0
 
 
 def start_unit(unit, what, argv, log=lambda line: None):
@@ -338,22 +325,19 @@ def start_unit(unit, what, argv, log=lambda line: None):
     if unit_active(unit):
         log("%s is running already" % unit)
         return False
-    cmd = host_command("systemd-run", "--user", "--quiet", "--collect", "--unit=" + unit,
-                       "--description=Frametop hand recorder: " + what,
-                       "-p", "PartOf=steamvr.service", "-p", "After=steamvr.service",
-                       "-p", "Restart=on-failure", "-p", "RestartSec=3", "-p", "TimeoutStopSec=5", *argv)
-    for attempt in range(3):   # distrobox-host-exec has failed once, silently, and worked again
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if r.returncode == 0 or unit_active(unit):
-            log("started %s" % unit)
-            return True
-        log("starting %s failed (exit %d): %s" % (unit, r.returncode, (r.stderr or r.stdout).strip()))
-        time.sleep(0.5)
+    cmd = ["systemd-run", "--user", "--quiet", "--collect", "--unit=" + unit,
+           "--description=Frametop hand recorder: " + what,
+           "-p", "PartOf=steamvr.service", "-p", "After=steamvr.service",
+           "-p", "Restart=on-failure", "-p", "RestartSec=3", "-p", "TimeoutStopSec=5", *argv]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=user_env())
+    if r.returncode == 0 or unit_active(unit):
+        log("started %s" % unit)
+        return True
     raise RuntimeError("couldn't start %s (exit %d): %s" % (unit, r.returncode, (r.stderr or r.stdout).strip()))
 
 
 def stop_unit(unit):
-    subprocess.run(host_command("systemctl", "--user", "stop", unit), capture_output=True, timeout=30)
+    subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=30, env=user_env())
 
 
 def ring_alive(path=None):
@@ -580,7 +564,7 @@ class Panel:
 # Processes
 
 def find_processes(name):
-    """[(pid, argv)] of running processes called name (the container shares the host's PIDs)."""
+    """[(pid, argv)] of running processes called name."""
     out = []
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
@@ -619,8 +603,6 @@ class Recorder:
                 "--sides", "auto" if swap is None else "1" if swap else "0"]
         if ring:
             argv += ["--ring", ring]
-        if not in_container():
-            argv = [os.path.expanduser("~/.local/bin/distrobox"), "enter", "dev", "--"] + argv
         self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file)
         self.started_ns = mono_ns()
 
@@ -772,8 +754,8 @@ def button_presses(data):
 class ButtonReader:
     """Reads the headset button on a thread and calls on_press() per press, debounced. path:
     an event device or, for testing, a FIFO carrying input_event structs. It's opened read-only
-    and shared; if it can't be opened (no device, no permission, /dev/input not reachable in a
-    container) it says so in the log and tries again now and then."""
+    and shared; if it can't be opened (no device, no permission) it says so in the log and tries
+    again now and then."""
 
     def __init__(self, path, on_press, log=None, debounce_s=BUTTON_DEBOUNCE_S):
         self.path, self.on_press, self.log = path, on_press, log or (lambda s: None)
@@ -1132,7 +1114,7 @@ def _git_describe():
 
 
 def _os_version():
-    path = "/run/host/etc/os-release" if in_container() else "/etc/os-release"
+    path = "/etc/os-release"
     try:
         with open(path) as f:
             for line in f:
@@ -1145,11 +1127,11 @@ def _os_version():
 
 def _steamvr_version():
     for db in ("/usr/lib/holo/pacmandb", "/var/lib/pacman"):   # SteamOS keeps it in the image
-        found = sorted(glob.glob(("/run/host" if in_container() else "") + db + "/local/deckard-steamvr-rel-*"))
+        found = sorted(glob.glob(db + "/local/deckard-steamvr-rel-*"))
         if found:
             return os.path.basename(found[-1])[len("deckard-steamvr-rel-"):]
-    p = host_path("/opt/steamvr/bin/version.txt")
-    if p:
+    p = "/opt/steamvr/bin/version.txt"
+    if os.path.exists(p):
         try:
             with open(p) as f:
                 return "build " + f.read().strip()
@@ -1162,8 +1144,8 @@ _camd_restarted = set()   # ft-camd pids camera_check(repair=True) has restarted
 
 
 def _unit_pid(unit):
-    r = subprocess.run(host_command("systemctl", "--user", "show", "-p", "MainPID", "--value", unit),
-                       capture_output=True, text=True, timeout=30)
+    r = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", "--value", unit],
+                       capture_output=True, text=True, timeout=30, env=user_env())
     try:
         return int(r.stdout.strip() or 0)
     except ValueError:
@@ -1518,9 +1500,9 @@ class Session:
             time.sleep(0.01)
 
     def _write_calibration(self):
-        src = host_path("/persist/xrservice.json")
-        if not src:
-            self._log("no /persist/xrservice.json: no calibration.json")
+        src = XRSERVICE_JSON
+        if not os.path.exists(src):
+            self._log("no %s: no calibration.json" % src)
             return []
         with open(src) as f:
             clean, removed = strip_calibration(json.load(f))
@@ -1532,9 +1514,9 @@ class Session:
         cv.cad_from_cal (Cam0 in CAD) and head (the head in CAD), in the shape the labeller reads
         (frame-hands train/label, as its cut.py writes it). The rest of that file names the unit
         (serial number, EDID). Returns what was removed, as "device.json:<path>"."""
-        src = host_path("/persist/device_config.json")
-        if not src:
-            self._log("no /persist/device_config.json: no device.json")
+        src = DEVICE_CONFIG
+        if not os.path.exists(src):
+            self._log("no %s: no device.json" % src)
             return []
         try:
             with open(src) as f:
@@ -1604,11 +1586,7 @@ class Session:
             raise _Stop()
 
     def _start_tracker(self):
-        up = os.path.join(REPO, "scripts", "container-up.sh")
-        if os.access(up, os.X_OK):
-            subprocess.run(host_command(up), capture_output=True, timeout=120)
-        argv = [os.path.expanduser("~/.local/bin/distrobox"), "enter", "dev", "--", FT_HANDS,
-                "--no-gestures", "--status", "0"]
+        argv = [FT_HANDS, "--no-gestures", "--status", "0"]
         if self.ring:
             argv += ["--ring", self.ring]
         self._start_unit(HANDS_UNIT, "hand tracking for feedback", argv)

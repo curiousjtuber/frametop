@@ -7,11 +7,9 @@ Wants=frametop-camd.service
 PartOf=steamvr.service
 
 [Service]
-# In the dev container (it's built against Fedora's libraries). It reads ft-camd's ring and
-# writes /run/user/UID/frametop-hands/hands and gestures. Settings: HANDS_* in ~/.config/frametop.conf.
-ExecStartPre=-@REPO@/scripts/container-up.sh
-ExecStartPre=-/usr/bin/pkill -x ft-hands
-ExecStart=%h/.local/bin/distrobox enter dev -- @REPO@/hands/build/ft-hands --status 60
+# Built for the host (hands/build.sh), so it runs directly. It reads ft-camd's ring and writes
+# /run/user/UID/frametop-hands/hands and gestures. Settings: HANDS_* in ~/.config/frametop.conf.
+ExecStart=@REPO@/hands/build/ft-hands --status 60
 Restart=always
 RestartSec=5
 TimeoutStopSec=5
