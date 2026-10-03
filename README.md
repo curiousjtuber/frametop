@@ -29,7 +29,7 @@ You need a Steam Frame with an internet connection, a keyboard (Bluetooth, or th
    curl -fsSL https://deejanuz.github.io/frametop/get.sh | bash
    ```
 
-   It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`. To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/DeeJanuz/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
+   It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`, which copies it into `~/.local/share/frametop/app` and installs Frametop from there (`--prefix DIR` for another folder). To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/DeeJanuz/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
 
    The installer builds Frametop with the compilers SteamOS ships and installs it in your home folder (the system files aren't touched). It asks you four things along the way: whether to install gaze mode (experimental, yes by default), whether to set up Remote Access, which needs a Fedora container in your home folder (distrobox; yes by default, and 1–2 GB to download), and the Bluetooth fixes, then whether to restart SteamVR. The Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
 
@@ -156,6 +156,8 @@ Or by hand: `cd ~/frametop && git pull && ./install.sh`.
 
 ## Uninstall
 
+From the install folder (`cd ~/.local/share/frametop/app`):
+
 ```
 ./desktops.sh uninstall                # the launcher's Desktop entry goes back to the stock desktop
 ./desktops.sh relay uninstall
@@ -172,7 +174,7 @@ gaze/tracker/install.sh uninstall      # if you installed our own eye tracker's 
 gaze/probe/install.sh uninstall        # if you installed the gaze probe
 ```
 
-Your settings stay: `~/.config/frametop.conf`, `frametop-input.json` (button maps and key combinations), `frametop-layout.json` (the layout and profiles), `frametop-float.json`, and `frametop-remote/` in `~/.config`, and the gaze calibration in `~/.local/state/frametop/gaze`. So does the desktop's own Plasma setup, in `~/.config/frametop`. Delete them too for a clean slate.
+Then delete the install folder, `~/.local/share/frametop/app`. Your settings stay: `~/.config/frametop.conf`, `frametop-input.json` (button maps and key combinations), `frametop-layout.json` (the layout and profiles), `frametop-float.json`, and `frametop-remote/` in `~/.config`, and the gaze calibration in `~/.local/state/frametop/gaze`. So does the desktop's own Plasma setup, in `~/.config/frametop`. Delete them too for a clean slate.
 
 ## How it works
 
