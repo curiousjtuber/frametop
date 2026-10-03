@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Check that the Steam Frame is ready for these projects: reachable (from a PC), the
-# distrobox tool and the dev container present, and disk space. Then check what Frametop
-# needs from SteamOS, which an update can change (scripts/update-check.py). Works on the
-# Frame too.
+# Check that the Steam Frame is ready for these projects: reachable (from a PC), the host's
+# compiler, the dev container if there is one (Remote Access), and disk space. Then check
+# what Frametop needs from SteamOS, which an update can change (scripts/update-check.py).
+# Works on the Frame too.
 # Usage: scripts/doctor.sh [--mark-good]
 #   --mark-good  once Frametop works, record the SteamOS, SteamVR, and KWin versions, so a
 #                later run says what an update changed
@@ -32,8 +32,13 @@ else
   fi
 fi
 check "SteamOS" on_frame '. /etc/os-release; echo "$PRETTY_NAME $VERSION_ID build $BUILD_ID, $(uname -m)"'
-check "distrobox" on_frame 'test -x ~/.local/bin/distrobox && ~/.local/bin/distrobox version | head -1'
-check "container $FRAME_BOX" on_frame "podman ps -a --filter name=^$FRAME_BOX\$ --format '{{.Image}} {{.Status}}' | grep ."
+check "host gcc" on_frame 'g++ --version | head -1'
+# The dev container is optional: only Remote Access needs it.
+if on_frame 'test -x ~/.local/bin/distrobox'; then
+  check "container $FRAME_BOX (Remote Access)" on_frame "podman ps -a --filter name=^$FRAME_BOX\$ --format '{{.Image}} {{.Status}}' | grep ."
+else
+  echo "-     dev container: not set up (only Remote Access needs it)"
+fi
 check "repo on the Frame" on_frame 'pwd'
 check "free space in ~" on_frame "df -h ~ | awk 'NR==2{print \$4\" free\"}'"
 

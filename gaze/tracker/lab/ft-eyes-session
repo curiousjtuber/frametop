@@ -15,11 +15,11 @@ secs=${2:-10}
 out=${FT_EYES_CAPTURES:-$HOME/.local/share/frametop/eyes/captures}/$name
 [ -e "$out" ] && { echo "$out exists" >&2; exit 1; }
 
-# ft-gaze runs in the dev container; start it first, it takes a moment to connect. It quits
-# when its stdin closes (--watch-stdin): killing distrobox doesn't reach it in the container.
+# Start ft-gaze first, it takes a moment to connect. It quits when its stdin closes
+# (--watch-stdin).
 # The recorder makes the folder; ft-gaze's output waits for it.
 tmp=$(mktemp -d)
-sleep $((secs + 3)) | "$HOME/.local/bin/distrobox" enter dev -- "$repo/gaze/build/ft-gaze" \
+sleep $((secs + 3)) | "$repo/gaze/build/ft-gaze" \
   --watch-stdin > "$tmp/gaze.jsonl" 2> "$tmp/gaze.log" &
 gaze=$!
 sleep 2
