@@ -3,11 +3,15 @@
 # universal 3D mouse, settings apps), built with the SteamOS host's own gcc and run on the
 # host, and optionally gaze mode, our own eye tracker for it, Remote Access (which needs the
 # dev box, a Fedora container) and the Bluetooth fixes. Run it on the headset in a terminal,
-# from this repo. It's safe to re-run, for example after `git pull`. (Hand tracking, hands/,
-# is deferred: it isn't offered here.) (It also works from a PC over SSH; see "Developing
-# from a PC" in the README.)
+# from this repo. It copies the repo into an install folder and installs from there, so
+# Frametop doesn't run from this checkout. It's safe to re-run, for example after `git
+# pull`. (Hand tracking, hands/, is deferred: it isn't offered here.) (It also works from a
+# PC over SSH; see "Developing from a PC" in the README.)
 #
-# Usage: ./install.sh [--yes] [--no-dev-box] [--no-bluetooth]
+# Usage: ./install.sh [--prefix DIR] [--yes] [--no-dev-box] [--no-bluetooth]
+#   --prefix DIR    the install folder (default ~/.local/share/frametop/app; . installs in
+#                   this checkout). From a PC, the Frame's synced copy (~/dev/frametop by
+#                   default) is the install folder, and this moves it.
 #   --yes           don't ask; installs gaze mode, our eye tracker if sudo can run without a
 #                   password prompt, and the dev box; skips the Bluetooth fixes and the
 #                   SteamVR restart
@@ -18,16 +22,43 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$root/scripts/_env.sh"
 
-assume_yes=0 bluetooth=1 dev_box=1
-for arg in "$@"; do
-  case $arg in
+args=("$@") assume_yes=0 bluetooth=1 dev_box=1 prefix=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --prefix) prefix=${2:?--prefix needs a folder}; shift ;;
+    --prefix=*) prefix=${1#--prefix=} ;;
     --yes) assume_yes=1 ;;
     --no-dev-box) dev_box=0 ;;
     --no-bluetooth) bluetooth=0 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
-    *) echo "unknown option: $arg" >&2; exit 2 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
+  shift
 done
+
+if [ "$FRAME_LOCAL" = 0 ]; then
+  [ -z "$prefix" ] || export FRAME_REPO=$prefix  # the scripts below sync and install there
+else
+  prefix=$(realpath -m "${prefix:-$HOME/.local/share/frametop/app}")
+  if [ "$prefix" != "$(realpath "$root")" ]; then
+    # Install from a copy, so Frametop doesn't run from (or break with) this checkout. It's
+    # replaced on every run, so it must be ours: missing, empty, or made by an earlier run.
+    case $prefix/ in "$(realpath "$root")"/*) echo "the install folder can't be in this checkout" >&2; exit 2 ;; esac
+    case $(realpath "$root")/ in "$prefix"/*) echo "the install folder can't hold this checkout" >&2; exit 2 ;; esac
+    [ ! -e "$prefix" ] || [ -z "$(ls -A "$prefix")" ] || [ -f "$prefix/.frametop-install" ] ||
+      { echo "$prefix isn't empty and isn't a Frametop install folder: choose another with --prefix" >&2; exit 1; }
+    mkdir -p "$prefix"
+    # As scripts/sync.sh copies to the Frame: what's gitignored stays out, and the copy's
+    # own builds (build/) stay in it.
+    rsync -a --delete --filter=':- .gitignore' --exclude=.git --exclude=build/ --exclude=.env --exclude='.env.*' \
+      "$root/" "$prefix/"
+    echo "Copied from $root by install.sh, and replaced on every run: keep nothing of yours here." \
+      > "$prefix/.frametop-install"
+    git -C "$root" log -1 --format='%h (%cd)' --date=short > "$prefix/VERSION" 2>/dev/null || rm -f "$prefix/VERSION"
+    echo "copied $root to $prefix; installing from there"
+    exec "$prefix/install.sh" "${args[@]}"
+  fi
+fi
 
 # Only the questions read from the terminal (or whatever stdin is); the build steps get
 # no input, so they can't swallow typed-ahead or piped answers.
