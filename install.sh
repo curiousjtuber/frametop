@@ -1,25 +1,30 @@
 #!/usr/bin/env bash
-# Install everything on the Steam Frame: the build container, Frametop (multi-screen
-# desktop, input relay, universal 3D mouse, settings app), and optionally gaze mode, our own
-# eye tracker for it, and the Bluetooth fixes. Run it on the headset in a terminal, from this repo. It's safe to re-run,
-# for example after `git pull`. (Hand tracking, hands/, is deferred: it isn't offered here.)
-# (It also works from a PC over SSH; see "Developing from a PC" in the README.)
+# Install everything on the Steam Frame: Frametop (multi-screen desktop, input relay,
+# universal 3D mouse, settings apps), built with the SteamOS host's own gcc and run on the
+# host, and optionally gaze mode, our own eye tracker for it, Remote Access (which needs the
+# dev box, a Fedora container) and the Bluetooth fixes. Run it on the headset in a terminal,
+# from this repo. It's safe to re-run, for example after `git pull`. (Hand tracking, hands/,
+# is deferred: it isn't offered here.) (It also works from a PC over SSH; see "Developing
+# from a PC" in the README.)
 #
-# Usage: ./install.sh [--yes] [--no-bluetooth]
-#   --yes           don't ask; installs gaze mode, and our eye tracker if sudo can run without
-#                   a password prompt; skips the Bluetooth fixes and the SteamVR restart
+# Usage: ./install.sh [--yes] [--no-dev-box] [--no-bluetooth]
+#   --yes           don't ask; installs gaze mode, our eye tracker if sudo can run without a
+#                   password prompt, and the dev box; skips the Bluetooth fixes and the
+#                   SteamVR restart
+#   --no-dev-box    don't set up the dev box (no Remote Access)
 #   --no-bluetooth  don't offer the Bluetooth fixes
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$root/scripts/_env.sh"
 
-assume_yes=0 bluetooth=1
+assume_yes=0 bluetooth=1 dev_box=1
 for arg in "$@"; do
   case $arg in
     --yes) assume_yes=1 ;;
+    --no-dev-box) dev_box=0 ;;
     --no-bluetooth) bluetooth=0 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -57,44 +62,31 @@ if [ "$FRAME_LOCAL" = 0 ] || [ -n "${SSH_CONNECTION:-}" ]; then
   echo "that need SteamVR start with it if it isn't running now."
 fi
 
-step "1/10 distrobox (container tool, installed in your home folder)"
-if on_frame 'test -x ~/.local/bin/distrobox'; then
-  echo "already installed: $(on_frame '~/.local/bin/distrobox version | head -1')"
-else
-  on_frame 'set -e; mkdir -p ~/dev/src
-# A tested release, so upstream changes cannot break new installs.
-[ -d ~/dev/src/distrobox ] || git clone --depth 1 --branch 1.8.2.5 https://github.com/89luca89/distrobox.git ~/dev/src/distrobox
-cd ~/dev/src/distrobox && ./install --prefix ~/.local'
-fi
-
-step "2/10 build container (Fedora 44 'dev', about 1-2 GB the first time)"
-"$root/setup/dev-container.sh"
-
-step "3/10 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
+step "1/9 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
 "$root/desktops.sh" relay install
 
-step "4/10 3D mouse: SteamVR driver"
+step "2/9 3D mouse: SteamVR driver"
 "$root/pointer/driver/build.sh"
 "$root/pointer/driver/install.sh" install 2>&1 | grep -v xdg-open
 
-step "5/10 3D mouse: pointer helper service"
+step "3/9 3D mouse: pointer helper service"
 "$root/pointer/helper/build.sh"
 "$root/pointer/helper/run.sh" install
 
-step "6/10 power service (turns the displays off while the headset isn't used, even on a stand)"
+step "4/9 power service (turns the displays off while the headset isn't used, even on a stand)"
 "$root/power/build.sh"
 "$root/power/run.sh" install
 
-step "7/10 multi-screen desktop (ft-screens), Frametop Input Settings, and Frametop Display Settings"
+step "5/9 multi-screen desktop (ft-screens), Frametop Input Settings, and Frametop Display Settings"
 "$root/screens/build.sh"
+"$root/setup/pyside-venv.sh"
 "$root/desktops.sh" install >/dev/null
 "$root/input-settings/install.sh"
 "$root/display-settings/install.sh"
-"$root/remote/install.sh"
 on_frame "sed -i 's/^POINTER=0/POINTER=1/' ~/.config/frametop.conf; grep -q '^POINTER=' ~/.config/frametop.conf || echo 'POINTER=1' >> ~/.config/frametop.conf"
 echo "the launcher's Desktop entry now opens the multi-screen desktop; 3D mouse on (POINTER=1 in ~/.config/frametop.conf)"
 
-step "8/10 gaze mode (optional, experimental: the pointer goes where you look)"
+step "6/9 gaze mode (optional, experimental: the pointer goes where you look)"
 gaze=0
 if ask "Install gaze mode? You turn it on and calibrate it in Frametop Input Settings, on the Gaze page." y; then
   "$root/gaze/run.sh" install
@@ -105,7 +97,7 @@ fi
 
 # Ours is gaze mode's default once it's installed (GAZE_TRACKER=auto). Without it, gaze mode
 # uses SteamVR's eye tracker.
-step "9/10 our own eye tracker for gaze mode (recommended: more accurate than SteamVR's)"
+step "7/9 our own eye tracker for gaze mode (recommended: more accurate than SteamVR's)"
 if [ "$gaze" = 0 ]; then
   echo "skipped: gaze mode isn't installed. Install it later with: gaze/tracker/install.sh"
 elif [ "$assume_yes" = 1 ] && ! sudo_quiet; then
@@ -131,7 +123,23 @@ else
   echo "skipped: gaze mode uses SteamVR's eye tracker. Install ours later with: gaze/tracker/install.sh"
 fi
 
-step "10/10 Bluetooth fixes (optional; they let LE mice and keyboards like the Swiftpoint Z3 reconnect)"
+step "8/9 Remote Access (optional: the dev box, a Fedora container with krdp, FreeRDP and TigerVNC; 1-2 GB)"
+if [ "$dev_box" = 1 ] && ask "Set up the dev box for Remote Access (using the Frametop desktop from another computer)?" y; then
+  if on_frame 'test -x ~/.local/bin/distrobox'; then
+    echo "distrobox already installed: $(on_frame '~/.local/bin/distrobox version | head -1')"
+  else
+    on_frame 'set -e; mkdir -p ~/dev/src
+# A tested release, so upstream changes cannot break new installs.
+[ -d ~/dev/src/distrobox ] || git clone --depth 1 --branch 1.8.2.5 https://github.com/89luca89/distrobox.git ~/dev/src/distrobox
+cd ~/dev/src/distrobox && ./install --prefix ~/.local'
+  fi
+  "$root/setup/dev-container.sh"
+  "$root/remote/install.sh"
+else
+  echo "skipped. Install later with: ./install.sh (it asks again)"
+fi
+
+step "9/9 Bluetooth fixes (optional; they let LE mice and keyboards like the Swiftpoint Z3 reconnect)"
 if [ "$bluetooth" = 1 ] && ask "Install the Bluetooth fixes? They need your password (sudo)." n; then
   "$root/setup/bluetooth/install.sh" install
 else

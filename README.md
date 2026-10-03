@@ -31,7 +31,7 @@ You need a Steam Frame with an internet connection, a keyboard (Bluetooth, or th
 
    It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`. To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/DeeJanuz/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
 
-   The installer sets up distrobox in your home folder (the system files aren't touched), a Fedora build container, and everything else. The first run downloads 1–2 GB. It asks you four things along the way: whether to install gaze mode (experimental, yes by default), our own eye tracker for it (yes by default), and the Bluetooth fixes, then whether to restart SteamVR. The eye tracker and the Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
+   The installer builds Frametop with the compilers SteamOS ships and installs it in your home folder (the system files aren't touched). It asks you five things along the way: whether to install gaze mode (experimental, yes by default), our own eye tracker for it (yes by default), whether to set up Remote Access, which needs a Fedora container in your home folder (distrobox; yes by default, and 1–2 GB to download), and the Bluetooth fixes, then whether to restart SteamVR. The eye tracker and the Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
 
 After the restart, Launch a program → Desktop opens the multi-screen desktop, with its screens arranged around where you're facing. Frametop Display Settings and Frametop Input Settings are in the desktop's application menu, under Settings.
 
@@ -136,7 +136,7 @@ With the displays off, the headset keeps tracking and rendering, so it uses abou
 This is an early release, tested on one Steam Frame (SteamOS 0.3.0 build 20260922, SteamVR 2.17.10).
 
 - A SteamOS or SteamVR update can break parts of it until Frametop catches up. After an update, run `cd ~/frametop && scripts/doctor.sh` in a terminal. It checks what Frametop needs from SteamOS, and says what changed since the versions you last marked as working and what to try. Once everything works, `scripts/doctor.sh --mark-good` records the versions. If something stops working, please report it.
-- The first install downloads 1–2 GB for the build container and compiles everything on the headset, which takes several minutes.
+- The first install compiles everything on the headset, which takes a few minutes, and with Remote Access downloads 1–2 GB for its container.
 - During a VR game, mapped controller buttons belong to the game, so they can't bring the screens up. The pause gesture still works: Frametop reads it without taking the thumbsticks from the game. With the automatic pause off, open the SteamVR dashboard, press Meta+Shift+H, or use a mapped mouse button instead.
 - Flatscreen games aren't detected as games, so they don't pause Frametop by themselves: click both thumbsticks twice to pause it. If your controllers end up working the screens instead of the game, set Controllers on the screens to "Only with the SteamVR dashboard open" (Frametop Display Settings, Visibility & pins tab).
 - Typing follows your last click. A controller click on a panel other than the screens (the dashboard, a Steam app) doesn't move typing there; click it with the mouse, or click a screen to bring typing back.
@@ -210,7 +210,7 @@ A Plasma session runs nested inside ft-screens (`screens/`), a small Wayland com
 | `hands/` | Hand tracking (experimental, deferred: the installer doesn't offer it). See [hands/README.md](hands/README.md). |
 | `display-settings/`, `input-settings/` | The two settings apps (Kirigami, Python). |
 | `remote/` | Frametop Remote Access, the app that turns remote desktop over VNC on and off. |
-| `setup/` | The build container and the Bluetooth fixes. See [setup/README.md](setup/README.md). |
+| `setup/` | The settings apps' Python environment, the dev container (Remote Access), and the Bluetooth fixes. See [setup/README.md](setup/README.md). |
 | `scripts/` | Helpers the installers use. They run commands locally on the Frame, or over SSH from a PC. |
 
 ## Developing from a PC
@@ -239,14 +239,14 @@ Then run `./install.sh` from the PC. If SteamVR isn't running on the Frame, the 
 scripts/doctor.sh                  # is the Frame reachable and ready?
 scripts/doctor.sh --mark-good      # and record the versions Frametop works with
 scripts/sync.sh                    # copy the repo to ~/dev/frametop on the Frame
-scripts/frame.sh '<cmd>'           # run in the dev container, in the Frame's copy
-scripts/frame.sh -C <dir> '<cmd>'  # same, in a folder of the repo
-scripts/frame.sh --host '<cmd>'    # run on the SteamOS host
+scripts/frame.sh --host '<cmd>'    # run on the SteamOS host, in the Frame's copy
+scripts/frame.sh --host -C <dir> '<cmd>'  # same, in a folder of the repo
+scripts/frame.sh '<cmd>'           # run in the dev container (Remote Access, hand tracking)
 ```
 
 The sync only goes one way. It makes the Frame's copy match your checkout, deleting files there that you've removed, and skips `.git`, `build/`, `.env`, and anything gitignored. Edit on the PC only, since the next sync overwrites changes made in `~/dev/frametop` on the Frame.
 
-Programs built in the `dev` container link against its glibc, which is newer than the host's, so they run inside the container. The SteamVR driver is the exception and is built to run on the host (see `pointer/driver/build.sh`). [AGENTS.md](AGENTS.md) has the working rules, including what not to restart while someone is using the headset.
+Frametop's programs are built on the SteamOS host, with the gcc and libraries its image ships, and run there. What the host lacks is built into `build/` folders: ft-screens' wlroots as a static library (`screens/build.sh`), and Python venvs for the settings apps (`setup/pyside-venv.sh`) and our own eye tracker (`gaze/tracker/build.sh`). [AGENTS.md](AGENTS.md) has the working rules, including what not to restart while someone is using the headset.
 
 ## License
 

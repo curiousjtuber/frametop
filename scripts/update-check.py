@@ -193,6 +193,16 @@ def check_host():
         report("warn", "KWin effects", f"no built-in {', '.join(gone)} effect: renamed? The desktop's "
                "kwinrc may no longer turn it off (session/frametop-session.sh)")
 
+    # Frametop's programs are built with the image's own compilers and headers.
+    toolchain = ["/usr/bin/gcc", "/usr/bin/g++", "/usr/bin/meson", "/usr/bin/ninja", "/usr/bin/pkgconf",
+                 "/usr/bin/wayland-scanner", "/usr/include/wayland-server.h", "/usr/include/gbm.h",
+                 "/usr/include/EGL/egl.h", "/usr/include/xkbcommon/xkbcommon.h"]
+    gone = [p for p in toolchain if not os.path.exists(p)]
+    if gone:
+        report("FAIL", "compilers", f"{', '.join(gone)} missing: ./install.sh can't build Frametop's programs")
+    else:
+        report("ok", "compilers", "gcc, meson and the headers the programs build against are there")
+
     if systemctl("cat", "steamvr.service"):
         report("ok", "steamvr.service", "Frametop's services start and stop with it")
     else:
@@ -268,6 +278,26 @@ def installed_binaries():
         if os.path.isfile(screens):
             found[screens] = "the desktop"
     return found
+
+
+def check_libraries():
+    """Each installed program still loads against the host's libraries, which an update
+    replaces: the loader resolves every library and symbol version, without running it."""
+    bad = []
+    found = installed_binaries()
+    for path in found:
+        try:
+            p = subprocess.run(["/lib/ld-linux-aarch64.so.1", path], capture_output=True, text=True, timeout=15,
+                               env=dict(os.environ, LD_TRACE_LOADED_OBJECTS="1", LD_BIND_NOW="1", LD_WARN="1"))
+            out = p.stdout + p.stderr
+        except (OSError, subprocess.TimeoutExpired) as e:
+            out = f"not found: {e}"
+        gaps = [l.strip() for l in out.splitlines() if re.search(r"not found|undefined symbol", l)]
+        if gaps:
+            bad.append(path)
+            report("FAIL", os.path.basename(path), f"{gaps[0]}: rebuild with ./install.sh")
+    if found and not bad:
+        report("ok", "libraries", f"all {len(found)} installed programs load against the host's")
 
 
 def check_openvr():
@@ -474,6 +504,7 @@ def main():
     else:
         sockets = unix_sockets()
         desktop_up = run("pgrep", "-x", "ft-screens")[0] == 0
+        check_libraries()
         check_openvr()
         check_overlays(desktop_up)
         check_services(sockets, desktop_up)
