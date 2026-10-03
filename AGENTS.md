@@ -6,7 +6,7 @@ Rules for people and coding agents changing this repo. The README covers what Fr
 
 Every script works in both modes, and must keep working in both:
 
-- On the Frame (SteamOS, VR variant), commands run locally, in this checkout.
+- On the Frame (SteamOS, VR variant), commands run locally, in this checkout. `install.sh` copies it into an install folder (`~/.local/share/frametop/app`) and installs from there; `./install.sh --prefix .` installs from the checkout itself, for working on it.
 - From a PC over SSH, the repo is synced to `~/dev/frametop` on the Frame (`scripts/sync.sh`), and commands run there. `scripts/_env.sh` works out which mode applies (`FRAME_LOCAL`, `FRAME_HOST`, `FRAME_REPO`).
 
 ```

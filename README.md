@@ -29,7 +29,7 @@ You need a Steam Frame with an internet connection, a keyboard (Bluetooth, or th
    curl -fsSL https://deejanuz.github.io/frametop/get.sh | bash
    ```
 
-   It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`. To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/DeeJanuz/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
+   It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`, which copies it into `~/.local/share/frametop/app` and installs Frametop from there (`--prefix DIR` for another folder). To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/DeeJanuz/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
 
    The installer builds Frametop with the compilers SteamOS ships and installs it in your home folder (the system files aren't touched). It asks you five things along the way: whether to install gaze mode (experimental, yes by default), our own eye tracker for it (yes by default), whether to set up Remote Access, which needs a Fedora container in your home folder (distrobox; yes by default, and 1–2 GB to download), and the Bluetooth fixes, then whether to restart SteamVR. The eye tracker and the Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
 
@@ -180,11 +180,11 @@ curl -fsSL https://deejanuz.github.io/frametop/uninstall.sh | bash
 It works in two steps, so it never takes away the keyboard, mouse, or desktop you're using while it runs:
 
 1. It stops Frametop from starting. Launch a program → Desktop opens the stock desktop again, and Frametop's services, its SteamVR driver, its menu entries, and the system files of our eye tracker and the Bluetooth fixes are removed (those need your `sudo` password). Everything running now keeps running until you restart the headset, and it offers to restart it for you.
-2. After the restart, run the same command again. It deletes the code in `~/frametop`, and asks whether to delete your settings, any eye or hand recordings, and the build container (1–2 GB) too.
+2. After the restart, run the same command again. It deletes the installed copy in `~/.local/share/frametop/app` and the code in `~/frametop`, and asks whether to delete your settings, any eye or hand recordings, and the build container (1–2 GB) too.
 
 To see what it would do without changing anything, add `-s -- --dry-run` after `bash`. If the code isn't in `~/frametop`, add `-s -- --dir <folder>`. From the repo, the same script is `./uninstall.sh`.
 
-Don't delete `~/frametop` by hand before you uninstall and restart: the desktop and the input relay run from it, and without it Launch a program → Desktop no longer opens anything. If you've already deleted it, the command above still works, since it doesn't need the repo.
+Frametop runs from the installed copy, not from `~/frametop`, so deleting `~/frametop` by hand is harmless (unless you installed with `--prefix .`, which runs it from the checkout). The command above doesn't need the repo either.
 
 Unless you ask for them to go, your settings stay: `~/.config/frametop.conf`, `frametop-input.json` (button maps and key combinations), `frametop-layout.json` (the layout and profiles), `frametop-float.json`, and `frametop-remote/` in `~/.config`, the gaze calibration in `~/.local/state/frametop`, and the desktop's own Plasma setup in `~/.config/frametop`. A later install picks them up again.
 

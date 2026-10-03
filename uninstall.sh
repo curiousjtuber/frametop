@@ -13,8 +13,9 @@
 #      Frametop's services, SteamVR driver, menu entries, and system files (our eye tracker's
 #      frame grabber and the Bluetooth fixes, with sudo) are removed. What runs now keeps running
 #      until you restart the headset.
-#   2. After the restart, run it again. It deletes the code (~/frametop) and, if you want, your
-#      settings and the build container.
+#   2. After the restart, run it again. It deletes the code (the installed copy in
+#      ~/.local/share/frametop/app, and ~/frametop) and, if you want, your settings and the
+#      build container.
 # When nothing of Frametop is running, one run does both.
 #
 # Options (piped, they go after "bash -s --"):
@@ -37,6 +38,7 @@ relay_unit=$HOME/.config/systemd/user/frametop-input-relay.service
 driver=$HOME/.local/share/frametop/ft_pointer
 vrpathreg=/opt/steamvr/bin/linuxarm64/vrpathreg
 handsctl=$HOME/.local/bin/ft-handsctl
+app=$HOME/.local/share/frametop/app  # install.sh's copy of the repo (its default --prefix)
 eyegrab_files=(/etc/systemd/system/frametop-eyegrab.service /etc/frametop/ft-eyegrab)
 bt_files=(/etc/systemd/system/steamframe-bt-fixups.service /etc/systemd/system/bluetooth.service.d/steamframe.conf
           /etc/steamframe/bt-fixups.sh)
@@ -58,14 +60,19 @@ size() { du -shc "$@" 2>/dev/null | tail -1 | cut -f1; }
 
 # Is this folder Frametop's code? Only then is it deleted.
 is_repo() { [ "$1" != "$HOME" ] && [ -f "$1/desktops.sh" ] && [ -f "$1/session/frametop-session.sh" ]; }
-find_repo() {
+# install.sh's copy of the repo (install.sh marks the folders it made).
+is_app() { [ -f "$1/.frametop-install" ]; }
+find_repo() {  # sets repo, and app when the code runs from a non-default install folder
   local p
-  [ -n "$dir" ] && { echo "$dir"; return; }
-  # The launcher entry and the relay's unit point into the repo, until step 1 removes them.
+  [ -n "$dir" ] && { repo=$dir; return; }
+  # The launcher entry and the relay's unit point into the code, until step 1 removes them:
+  # the installed copy, or the repo itself (install.sh --prefix .).
   p=$(sed -n 's#^Exec=\(.*\)/session/frametop-session\.sh.*#\1#p' "$override" 2>/dev/null | head -1)
   [ -z "$p" ] && p=$(sed -n 's#^ExecStart=/usr/bin/python3 \(.*\)/input/input-relay\.py.*#\1#p' "$relay_unit" 2>/dev/null | head -1)
+  if [ -n "$p" ] && is_app "$p"; then app=$p; p=; fi
   [ -z "$p" ] && [ -f "${BASH_SOURCE[0]:-}" ] && p=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  echo "${p:-$HOME/frametop}"
+  if [ -n "$p" ] && is_app "$p"; then app=$p; p=; fi
+  repo=${p:-$HOME/frametop}
 }
 
 # Frametop's programs that are running now (step 1 leaves them running until the restart).
@@ -101,7 +108,7 @@ main() {
     return 1
   fi
   [ "$dry" = 1 ] && echo "Dry run: nothing changes."
-  repo=$(find_repo)
+  find_repo
 
   # Step 1: what makes Frametop start. Nothing here stops a running program.
   [ -f "$override" ] && grep -q 'Frametop' "$override" || override=
@@ -180,6 +187,11 @@ main() {
   fi
 
   step "Step 2 of 2: delete what's left"
+  if is_app "$app"; then
+    echo "Deleting the installed copy, $app ($(size "$app"))."
+    cd "$HOME"
+    run rm -rf "$app"
+  fi
   if [ -d "$repo" ] && is_repo "$repo"; then
     if [ -f "$repo/.git" ]; then
       echo "Leaving $repo: it's a git worktree. Remove it with git worktree remove."
