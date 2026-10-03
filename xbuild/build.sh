@@ -2,7 +2,7 @@
 # Cross-compile Frametop's native programs for the SteamOS host with zig. They target
 # aarch64 with glibc 2.39, the host's, so they run on the Frame host itself instead of in
 # the dev container. This machine's own tools build them when it has them, on any Linux,
-# in a container or not (one of the Frame's own distroboxes too). Otherwise, after asking,
+# in a container or not (the Frame host and its distroboxes too). Otherwise, after asking,
 # they're built in the dev box, the Fedora container setup/dev-container.sh makes, on this
 # machine. Then, on the Frame, check.sh checks them against the host's libraries.
 # Usage: xbuild/build.sh [--dev-box] [--yes] [--no-check]
@@ -41,12 +41,18 @@ if [ "$box" = dev ]; then
 fi
 
 # What the build runs. wlroots.sh, until it has built wlroots once, needs meson, ninja,
-# pkgconf, and a C compiler and wayland-scanner for this machine itself.
+# pkgconf, and a C compiler and wayland-scanner for this machine itself. The Frame's own
+# SteamOS image has all of them but zig and a recent enough meson, which mise provides.
 want_zig=$(sed -n 's/^zig *= *"\(.*\)"/\1/p' "$here/mise.toml")
 missing=()
 for t in curl bsdtar nm objdump; do command -v $t >/dev/null || missing+=("$t"); done
 if [ ! -f "$here/build/wlroots-install/usr/lib/libwlroots-0.20.a" ]; then
-  for t in meson ninja pkgconf cc; do command -v $t >/dev/null || missing+=("$t"); done
+  for t in ninja pkgconf cc; do command -v $t >/dev/null || missing+=("$t"); done
+  # meson comes from mise with zig; without mise, the one here must be 1.10 or newer.
+  if [ ! -x "$(command -v mise || echo "$HOME/.local/bin/mise")" ]; then
+    v=$(meson --version 2>/dev/null || echo 0)
+    [ "$(printf '%s\n' "$v" 1.10 | sort -V | head -1)" = 1.10 ] || missing+=("meson 1.10 or newer")
+  fi
   command -v pkgconf >/dev/null && ! pkgconf --exists wayland-scanner && missing+=(wayland-scanner)
 fi
 # xbuild/_env.sh gets the pinned zig through mise, if there's mise.

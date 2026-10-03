@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Install what xbuild/build.sh and install-cross.sh need to build on this machine, with its
 # package manager (apt, dnf or pacman), so the build needs no dev box. In a distrobox it
-# installs into that container. zig itself comes from mise (xbuild/mise.toml): this
-# installs mise into ~/.local/bin if it isn't there (https://mise.jdx.dev).
+# installs into that container; on the Frame host, whose image has them, nothing. zig and
+# meson come from mise (xbuild/mise.toml): this installs mise into ~/.local/bin if it isn't
+# there (https://mise.jdx.dev).
 # Usage: xbuild/install-tools.sh [--yes]   (uses sudo unless run as root)
 #   --yes   don't ask before installing
 set -euo pipefail
@@ -13,15 +14,17 @@ yes=0
 for arg in "$@"; do
   case $arg in
     --yes) yes=1 ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
-[ "$where" != frame ] || {
-  echo "The Frame host's system is read-only: run this in a distrobox there, or let" >&2
-  echo "xbuild/build.sh build in the dev box." >&2
-  exit 1
-}
+# The Frame host's system is read-only, and its SteamOS image has the tools already: only
+# mise is missing there, for zig and meson.
+if [ "$where" = frame ]; then
+  [ -x "$(command -v mise || echo "$HOME/.local/bin/mise")" ] || curl -fsSL https://mise.run | sh
+  echo "Done: xbuild/build.sh builds here now (the SteamOS image's tools, mise's zig and meson)."
+  exit 0
+fi
 
 if command -v apt-get >/dev/null; then
   install=(apt-get install -y --no-install-recommends)

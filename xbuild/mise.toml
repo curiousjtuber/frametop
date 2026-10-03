@@ -1,4 +1,8 @@
-# The zig xbuild is tested with: its options change between releases (0.16 has no
-# --exclude-libs, for one). xbuild/_env.sh installs and uses it through mise.
+# The tools the xbuild is tested with: zig's options change between releases (0.16 has no
+# --exclude-libs, for one), and meson before 1.10 can't take zig's glibc-versioned target
+# (aarch64-linux-gnu.2.39; the Frame image's meson 1.4 fails on it). xbuild/_env.sh installs
+# and uses them through mise; uv installs meson.
 [tools]
 zig = "0.16.0"
+uv = "0.12.22"
+"pipx:meson" = "1.12.1"

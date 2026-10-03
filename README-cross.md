@@ -64,7 +64,7 @@ xbuild/build.sh
 
 It builds with [zig](https://ziglang.org) for the Frame host (aarch64, glibc 2.39), on any Linux, the Frame included. Each program goes into `build-cross/`, next to each folder's `build/` from the dev box build, so the two never mix.
 
-It builds with this machine's own tools when it has them, whether that's a PC or one of the Frame's own distroboxes (an Ubuntu one, say). They are curl, bsdtar, nm, objdump, and, to build wlroots the first time, meson, ninja, pkgconf, a C compiler and wayland-scanner; `install-cross.sh` also needs git, rsync and patch. This installs them all with apt, dnf or pacman, in a distrobox into that container, and mise for zig:
+It builds with this machine's own tools when it has them: a PC, one of the Frame's distroboxes (an Ubuntu one, say), or the Frame host itself. They are curl, bsdtar, nm, objdump, and, to build wlroots the first time, ninja, pkgconf, a C compiler and wayland-scanner; `install-cross.sh` also needs git, rsync and patch. zig and meson come from mise ([below](#zig-and-meson)). The Frame's SteamOS image (build 20260930) has all the rest, so on the Frame host, with mise in `~/.local/bin`, it needs no container at all. Elsewhere, this installs them with apt, dnf or pacman, in a distrobox into that container, and mise:
 
 ```
 xbuild/install-tools.sh
@@ -72,7 +72,9 @@ xbuild/install-tools.sh
 
 When one is missing, it says which and offers to build in the dev box on this machine instead (`setup/dev-container.sh --local`, the same box as the regular build; about 2 GB the first time). `--dev-box` builds there even when the tools are here. A PC's box is x86_64 and the Frame's is aarch64; zig builds the same programs from either.
 
-zig is 0.16.0, the version `xbuild/mise.toml` pins, since zig's options change between releases. With [mise](https://mise.jdx.dev) installed, the scripts install and use that version themselves; a distrobox shares your home folder, so the host's mise works in it. Without mise, a zig on PATH has to be that version; in the dev box, xbuild installs Fedora's `zig` package, and stops if its version isn't the pinned one. It also installs `bsdtar` there. Both are installed by xbuild itself, so `setup/dev-container.sh`'s list stays as it is for everyone who doesn't cross-compile.
+### zig and meson
+
+`xbuild/mise.toml` pins zig 0.16.0, since zig's options change between releases, and meson 1.12.1 (installed with uv): meson before 1.10 can't take zig's glibc-versioned target, and the Frame image's meson is 1.4. With [mise](https://mise.jdx.dev) installed, the scripts install and use those versions themselves; a distrobox shares your home folder, so the host's mise works in it. Without mise, a zig on PATH has to be that version, and meson 1.10 or newer; in the dev box, xbuild installs Fedora's `zig` package, and stops if its version isn't the pinned one. It also installs `bsdtar` there. Both are installed by xbuild itself, so `setup/dev-container.sh`'s list stays as it is for everyone who doesn't cross-compile.
 
 | Program | Links against on the host |
 | --- | --- |
