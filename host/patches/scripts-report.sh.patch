@@ -1,0 +1,20 @@
+--- a/scripts/report.sh
++++ b/scripts/report.sh
+@@ -5,7 +5,7 @@
+ set -euo pipefail
+ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ . "$root/scripts/_env.sh"
+-out=$root/frametop-report-$(date +%Y%m%d-%H%M%S).txt
++out=$HOME/frametop-report-$(date +%Y%m%d-%H%M%S).txt  # not in the copy, which install-host.sh replaces
+ 
+ on_frame_script "$FRAME_REPO" > "$out" 2>&1 <<'EOF' || true
+ repo=$1
+@@ -16,7 +16,7 @@
+ section Versions
+ grep -E '^(PRETTY_NAME|VERSION_ID|BUILD_ID|VARIANT_ID)=' /etc/os-release
+ grep -m1 -o 'vrcompositor [0-9.]* startup' $logs/vrcompositor.txt 2>/dev/null || echo "SteamVR: not found"
+-git -C "$repo" log -1 --format='Frametop %h (%cd)' --date=short 2>/dev/null || echo "Frametop: not a git checkout"
++echo "Frametop $(cat "$repo/VERSION" 2>/dev/null || echo "(no VERSION)"), built for the host (install-host.sh)"
+ ~/.local/bin/distrobox version 2>/dev/null || echo "distrobox: not installed"
+ podman container inspect -f 'dev container: running={{.State.Running}} image={{.ImageName}}' dev 2>/dev/null || echo "dev container: missing"
+ 

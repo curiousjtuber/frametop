@@ -1,0 +1,23 @@
+--- a/pointer/helper/frametop-pointer.service
++++ b/pointer/helper/frametop-pointer.service
+@@ -8,17 +8,13 @@
+ Requisite=steamvr.service
+ 
+ [Service]
+-# Runs in the dev container (built there against its libraries). The helper process
+-# lives in the container, so clean it up explicitly around distrobox enter.
+-# Start the container in a scope of its own first: started by this service (distrobox enter
+-# does that on demand), stopping the service would stop the container and all in it.
+-ExecStartPre=-@REPO@/scripts/container-up.sh
++# Built for the host (README-host.md). A copy started by hand (run.sh start)
++# would fight it for the driver: stop that first.
+ ExecStartPre=-/usr/bin/pkill -x ft-pointer
+-ExecStart=%h/.local/bin/distrobox enter dev -- @REPO@/pointer/helper/build/ft-pointer
++ExecStart=@REPO@/pointer/helper/build/ft-pointer
+ ExecStopPost=-/usr/bin/pkill -x ft-pointer
+ Restart=on-failure
+ RestartSec=3
+-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
+ TimeoutStopSec=5
+ 
+ [Install]

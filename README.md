@@ -144,6 +144,10 @@ cd ~/frametop && scripts/report.sh
 
 This writes `frametop-report-<date>.txt` with version numbers, service states, settings, and recent logs. Bluetooth addresses and the headset's serial number are masked. Then [open an issue](https://github.com/DeeJanuz/frametop/issues), describe what you did, what you expected, and what happened, and attach the file. Quick questions can go to [Discord](https://discord.gg/W3X9f7z3Bc) instead.
 
+### Without the dev box
+
+`install-host.sh` builds Frametop's programs with the SteamOS host's own gcc instead, so they run on the host without the Fedora container. It needs a SteamOS image that ships gcc: 0.3.0 and the 0.4.3 beta do. See [README-host.md](README-host.md).
+
 ## Update
 
 Run the same command again. It updates `~/frametop` to the latest of the version you have (or switches, if you pick the other one) and installs it:
