@@ -139,6 +139,9 @@ STEAM_REASONS = {"lost_left": ("left eye lost", "SteamVR lost your left eye"),
                  "vergence": ("eyes disagreed", "SteamVR's two eyes disagreed")}
 FIT_HINT = "check the headset fit"
 ACCEPT_WAIT = 1.5      # seconds after a click with no capture before the panel says what it waits for
+OWN_HOLD_MAX = 2.5     # seconds a full dot keeps gathering our tracker's frames after the click when a
+                       # window held too few (SteamOS 0.4.3 runs the eye cameras at 15 fps while SteamVR
+                       # itself doesn't use them: a 0.3 s window is 4 frames, and ft-eyes wants 15)
 
 
 def reject_reason(reply, why):
@@ -506,7 +509,7 @@ class Checks:
         self.to_panel(f"dot {yaw:.3f} {pitch:.3f} look")
         self.last_progress = None
         c["shown"] = time.monotonic()
-        c["run"], c["accept"], c["done_at"], c["accept_at"] = [], False, None, None
+        c["run"], c["accept"], c["done_at"], c["accept_at"], c["retry_at"] = [], False, None, None, 0.0
 
     def on_sample(self, s):
         self.sample_at = time.monotonic()
@@ -565,10 +568,12 @@ class Checks:
             yaw, pitch, _ = c["dots"][c["i"]]
             self.to_panel(f"dot {yaw:.3f} {pitch:.3f} capture {progress:.2f}")
             self.last_progress = progress
-        if c["accept"] and held >= 0.3 and len(window) >= 10:
+        if c["accept"] and held >= 0.3 and len(window) >= 10 and now >= c.get("retry_at", 0.0):
             sd, _ = spread([(p[2], p[3]) for p in window])
             if sd <= ACCEPT_SPREAD:
-                self.capture(window)
+                # Our tracker gets everything since just before the click, so a window that held
+                # too few frames (capture's retry) grows while the look stays on the dot.
+                self.capture([p for p in run if p[0] >= c["accept_at"] - 0.3] if c["own"] else window)
             return
         if c["kind"] == "quick" and held >= CHECK_WINDOW and len(window) >= 20:
             sd, _ = spread([(p[2], p[3]) for p in window])
@@ -642,6 +647,19 @@ class Checks:
                 if svc.kind == "eyes":
                     svc.weights["steam"].add(miss)
                 svc.dirty = True
+        if not ok and c["own"] and c["kind"] == "full" and c["accept_at"]:
+            words = rec.get("reply", "").split()
+            if ("seen" in words or "moved" in words) and time.monotonic() - c["accept_at"] < OWN_HOLD_MAX:
+                # Too few frames in the window, or the pupil moved: not a miss yet. Keep the look
+                # on the dot and take it again with the frames gathered since the click (for
+                # "moved", without the older half). Low frame rates need this (OWN_HOLD_MAX).
+                rec.update(accepted=False, retry=True)
+                self.log_check(rec)
+                if "moved" in words:
+                    del c["run"][:len(c["run"]) // 2]
+                c["retry_at"] = time.monotonic() + 0.3
+                self.note("Keep looking at the dot")
+                return
         if not ok:
             short, long, fit = reject_reason(rec.get("reply", "") if c["own"] else None, rec.get("dropped"))
             rec["reason"] = long
@@ -660,7 +678,7 @@ class Checks:
             else:
                 self.note(f"Not taken: {long}. Look at the dot and click again")
                 self.to_panel(f"dot {yaw:.3f} {pitch:.3f} fail")
-                c["run"], c["accept"], c["accept_at"] = [], False, None
+                c["run"], c["accept"], c["accept_at"], c["retry_at"] = [], False, None, 0.0
                 c["shown"] = time.monotonic()  # settle again, then retry
             return
         c["captured"] += 1
@@ -855,7 +873,7 @@ class Checks:
             return
         if c["done_at"]:
             return
-        if c["accept"] and c["accept_at"] and now - c["accept_at"] > ACCEPT_WAIT:
+        if c["accept"] and c["accept_at"] and now - c["accept_at"] > ACCEPT_WAIT and not c.get("retry_at"):
             # Clicked, but no capture yet (see on_sample): say what it's waiting for.
             full = c["kind"] == "full"
             if now - c.get("gaze_at", 0.0) > 0.5:
