@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Build the hand recorder's headset panel ft-handpanel in the dev container on the Frame
-# (hands/rec/build/; it also runs there). Like gaze/build.sh: the pinned public OpenVR header
+# Build the hand recorder's headset panel ft-handpanel on the Frame host, with the gcc and
+# libraries its SteamOS image ships (hands/rec/build/; it runs there too). Like gaze/build.sh: the pinned public OpenVR header
 # (the DMA-BUF import is newer than the header shipped with SteamVR's samples), stb_truetype
 # for the text and stb_image (PNG only) for the pose pictures, at the same stb commit.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 "$root/scripts/sync.sh" >/dev/null
-exec "$root/scripts/frame.sh" -C hands/rec 'set -e; mkdir -p build/include
+exec "$root/scripts/frame.sh" --host -C hands/rec 'set -e; mkdir -p build/include
 openvr=v2.15.6
 [ -f build/include/openvr-$openvr ] || { curl -fsSL "https://raw.githubusercontent.com/ValveSoftware/openvr/$openvr/headers/openvr.h" -o build/include/openvr.h && touch build/include/openvr-$openvr; }
 stb=2c980bb59875b0d32144a71867fbdebb2f77cd20

@@ -15,8 +15,7 @@ What it looks at, cheapest first, all read-only:
      interleaving support: N", "Created N tasks (T tracking, P passthrough)" and the
      TrackingCameraInit lines. A wake doesn't always print "Created N tasks", so the parser
      tracks each camera start ("episode") from the FPGA check to the next close.
-  2. Which /dev/video* XRService has open (/proc/PID/fd). Only on the host: the dev container
-     can't read another process's fd table (checked 2026-10-02), and then this is skipped.
+  2. Which /dev/video* XRService has open (/proc/PID/fd), skipped when that can't be read.
   3. A running ft-camd's ring header (/run/user/UID/frametop-hands/cam-ring): how many mono
      cameras it publishes.
 
@@ -250,8 +249,7 @@ def xrservice_pid():
 
 
 def xrservice_fds(pid):
-    """{"videos": [N, ...], "log": path or ""} from /proc/PID/fd, or None if it can't be read
-    (the dev container can't)."""
+    """{"videos": [N, ...], "log": path or ""} from /proc/PID/fd, or None if it can't be read."""
     try:
         fds = os.listdir("/proc/%d/fd" % pid)
     except OSError:
@@ -361,7 +359,7 @@ def check(log=None, proc=True, ring=True, ring_path=None):
             evidence.append("XRService isn't running")
             status, reason = "unknown", "SteamVR isn't running (no XRService)"
         elif fds is None:
-            evidence.append("XRService pid %d: its open files can't be read here (in the dev container?)" % pid)
+            evidence.append("XRService pid %d: its open files can't be read here" % pid)
             out["xrservice"] = {"pid": pid, "videos": None}
         else:
             videos = fds["videos"]

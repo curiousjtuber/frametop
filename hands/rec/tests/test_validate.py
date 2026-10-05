@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for validate.py and hub.py (no network): a good export, and broken ones.
 
-  python3 hands/rec/tests/test_validate.py     (in the dev container, or anywhere with zstd)
+  python3 hands/rec/tests/test_validate.py     (anywhere with zstd)
 """
 import hashlib
 import json
@@ -350,11 +350,11 @@ class SessionFilesTest(unittest.TestCase):
         takes.write_json(src, full)
         s = session.Session.__new__(session.Session)
         s.session_dir, s._log = self.tmp, lambda text: None
-        with mock.patch.object(session, "host_path", lambda p: src if p.endswith("device_config.json") else None):
+        with mock.patch.object(session, "DEVICE_CONFIG", src):
             self.assertEqual(s._write_device(), [])
         with open(os.path.join(self.tmp, "device.json")) as f:
             self.assertEqual(json.load(f), DEVICE)
-        with mock.patch.object(session, "host_path", lambda p: None):
+        with mock.patch.object(session, "DEVICE_CONFIG", os.path.join(self.tmp, "missing.json")):
             self.assertEqual(s._write_device(), [])
 
     def test_suffix_id(self):

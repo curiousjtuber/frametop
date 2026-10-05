@@ -1,0 +1,7 @@
+# Python for hand tracking's tools (hands/tools: NumPy and OpenCV) and the hand recorder's
+# upload (hands/rec/hub.py: huggingface_hub). hands/build.sh puts them in hands/build/venv, a
+# venv of the Frame host's Python, remade when this file changes. NumPy and OpenCV are the
+# ones gaze/tracker/requirements.txt pins (about 165 MB of wheels).
+numpy==2.5.3
+opencv-python-headless==5.0.0.93
+huggingface_hub>=1.0,<2

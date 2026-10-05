@@ -1,5 +1,5 @@
-# Hand tracking, built into build/ (hands/build.sh runs this in the dev container):
-#   make          ft-camd (camd/: runs on the host, so linked statically) and ft-hands (track/)
+# Hand tracking, built into build/ (hands/build.sh runs this on the Frame host):
+#   make          ft-camd (camd/) and ft-hands (track/)
 #   make tools    ft-handreplay and ft-ringplay, for recordings
 #   make check    builds and runs the C++ unit tests (tests/sides_test.cpp)
 # The first build fetches ncnn (NCNN_TAG) and builds it into build/ncnn, which takes a few
@@ -20,7 +20,7 @@ tools: build/ft-handreplay build/ft-ringplay
 
 build/ft-camd: $(CAMD) camd/tp.h camd/xrcams.h camd/fhring.h
 	@mkdir -p build
-	$(CC) $(CFLAGS) -static -o $@ $(CAMD) -lm
+	$(CC) $(CFLAGS) -o $@ $(CAMD) -lm
 
 build/ft-hands: track/main.cpp $(TRACK) $(HDR) $(NCNN)/lib/libncnn.a
 	@mkdir -p build

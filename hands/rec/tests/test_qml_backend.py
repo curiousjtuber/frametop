@@ -2,7 +2,7 @@
 """main.qml against ft_handrec.Backend: every backend.name(...) the window calls is a slot, and
 every backend.name it reads is a property or a slot. A method that lost its @Slot shows up in
 QML only as "is not a function" when its button is pressed (2026-10-03: Export did nothing).
-Needs PySide6 (the dev container); skipped without it.
+Needs PySide6 (build/pyside/bin/frametop-python, from setup/pyside-venv.sh); skipped without it.
 
   python3 hands/rec/tests/test_qml_backend.py
 """

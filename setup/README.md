@@ -5,7 +5,7 @@ One-time setup for the Steam Frame itself: the settings apps' Python environment
 | Script | What it sets up | Needs host `sudo` |
 | --- | --- | --- |
 | `pyside-venv.sh` | PySide6 on the host's own Qt, for Frametop Display Settings and Frametop Input Settings | No |
-| `dev-container.sh` | The optional `dev` container (Fedora 44 toolbox), for Remote Access and hand tracking | No |
+| `dev-container.sh` | The optional `dev` container (Fedora 44 toolbox), for Remote Access | No |
 | `bluetooth/install.sh` | Persistent fixes so Bluetooth LE mice and keyboards reconnect | Yes |
 
 ## Settings apps' Python environment
@@ -22,7 +22,7 @@ Frametop Display Settings and Frametop Input Settings are Python apps (PySide6 a
 setup/dev-container.sh
 ```
 
-Only Remote Access (Fedora's krdp, FreeRDP and TigerVNC) and hand tracking (deferred) need it; `install.sh` asks. It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
+Only Remote Access (Fedora's krdp, FreeRDP and TigerVNC) needs it; `install.sh` asks. It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
 
 ## Bluetooth LE mice and keyboards
 

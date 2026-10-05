@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Frametop Hand Recorder: record your hands for the open hand dataset (hands/rec/DESIGN.md).
 
-A Kirigami (QML) app with a Python backend. It runs in the dev container:
+A Kirigami (QML) app with a Python backend. It runs on the host, with PySide6 from
+setup/pyside-venv.sh (hands/rec/ft-handrec):
   - Welcome: the consent text (CONSENT.md), shown the first time and again when its version
     changes. Agreeing writes profile.json with a random contributor id.
   - Before you start: the checklist (objects, controller straps, lighting, sleeves, privacy,
@@ -54,12 +55,14 @@ HF_DATASET = hub.HF_DATASET
 CONSENT_PATH = hub.CONSENT_PATH
 UPLOAD_PATH = hub.UPLOAD_PATH
 HUB_PATH = os.path.join(HERE, "hub.py")
+# hands/build/venv has huggingface_hub (hands/build.sh): hub.py runs with it when it's there.
+HANDS_PYTHON = os.path.join(os.path.dirname(HERE), "build", "venv", "bin", "python")
 VALIDATE_PATH = os.path.join(HERE, "validate.py")
 AWAKE_UNIT = "frametop-handrec-awake.service"
 SCRIPT_PATH = os.path.join(HERE, "script.json")
 # The headset counts as worn while vrcompositor runs and a display panel is lit: SteamVR turns
 # the panels off 5 s after the headset comes off (frame-job's check; the proximity sensor's
-# readings are too noisy). The dev container sees the host's processes and /sys.
+# readings are too noisy).
 BACKLIGHTS = "/sys/class/backlight"
 ROUND_BYTES = 10 * 1000 ** 3  # about what one round of recording takes
 # The checklist's choices; the keys are what session.json stores.
@@ -492,8 +495,8 @@ class Backend(QObject):
         def run():
             result = None
             try:
-                r = subprocess.run(mod.host_command("systemctl", "--user", "restart", "--no-block",
-                                                    "steamvr.service"), capture_output=True, text=True, timeout=60)
+                r = subprocess.run(["systemctl", "--user", "restart", "--no-block", "steamvr.service"],
+                                   capture_output=True, text=True, timeout=60)
                 if r.returncode != 0:
                     raise RuntimeError((r.stderr or r.stdout).strip() or "exit %d" % r.returncode)
                 end = time.monotonic() + RECHECK_FOR_S
@@ -903,7 +906,8 @@ class Backend(QObject):
         return os.environ.get(hub.ALLOW_ENV) == "1"
 
     def _hub_argv(self, *args):
-        return [sys.executable, HUB_PATH, "--base", self.store.base, *args]
+        py = HANDS_PYTHON if os.access(HANDS_PYTHON, os.X_OK) else sys.executable
+        return [py, HUB_PATH, "--base", self.store.base, *args]
 
     # The login: hub.py whoami in a child process (it asks huggingface.co)
     @Property("QVariantMap", notify=loginChanged)

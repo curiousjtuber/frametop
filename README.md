@@ -243,7 +243,7 @@ scripts/doctor.sh --mark-good      # and record the versions Frametop works with
 scripts/sync.sh                    # copy the repo to ~/dev/frametop on the Frame
 scripts/frame.sh --host '<cmd>'    # run on the SteamOS host, in the Frame's copy
 scripts/frame.sh --host -C <dir> '<cmd>'  # same, in a folder of the repo
-scripts/frame.sh '<cmd>'           # run in the dev container (Remote Access, hand tracking)
+scripts/frame.sh '<cmd>'           # run in the dev container (Remote Access)
 ```
 
 The sync only goes one way. It makes the Frame's copy match your checkout, deleting files there that you've removed, and skips `.git`, `build/`, `.env`, and anything gitignored. Edit on the PC only, since the next sync overwrites changes made in `~/dev/frametop` on the Frame.

@@ -316,7 +316,7 @@ def find_zstd():
     found = shutil.which("zstd")
     if found:
         return found
-    return next((p for p in ("/usr/bin/zstd", "/run/host/usr/bin/zstd") if os.access(p, os.X_OK)), None)
+    return "/usr/bin/zstd" if os.access("/usr/bin/zstd", os.X_OK) else None
 
 
 class Frames:

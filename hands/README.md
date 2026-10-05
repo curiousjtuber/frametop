@@ -10,7 +10,7 @@ It serves two things in Frametop:
 Two programs, each a user service that stops when SteamVR does:
 
 - `ft-camd` (`camd/`, C) borrows XRService's camera buffers and publishes the four IR tracking cameras' frames to a shared-memory ring. It runs on the host.
-- `ft-hands` (`track/`, C++) finds hands in those frames with MediaPipe's palm and landmark models on ncnn, triangulates them, and publishes them. It runs in the dev container.
+- `ft-hands` (`track/`, C++) finds hands in those frames with MediaPipe's palm and landmark models on ncnn, triangulates them, and publishes them. It runs on the host too.
 
 They don't start with SteamVR. `hands/run.sh install` builds them, gives ft-camd its capabilities, installs both services disabled, and links `hands/ft-handsctl` into `~/.local/bin`. Then `ft-handsctl on` starts hand tracking and `ft-handsctl off` stops it. `install.sh` doesn't install it.
 
@@ -102,7 +102,7 @@ hands/build/ft-hands                  # status every 5 s; Ctrl+C to stop
 hands/build/ft-hands --int8           # the 8-bit models (models/ncnn/*-int8.ncnn.*)
 ```
 
-Run it in the dev container (`distrobox enter dev -- ...`). It reads the factory calibration from `/persist` (`/run/host/persist` in the container).
+It reads the factory calibration from `/persist`.
 
 Options:
 
@@ -202,7 +202,7 @@ hands/build/ft-handreplay ~/.local/share/frametop/hands/rec-20260929-120000 --co
 
 ## Tools
 
-Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, because Fedora's `python3-opencv` pulls in over a gigabyte; in the dev container, run `sudo dnf install python3-numpy python3-opencv` once. Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
+Python, with NumPy and OpenCV from `hands/build/venv`, which `hands/build.sh` makes from `hands/requirements.txt` (about 165 MB of wheels): run them with `hands/build/venv/bin/python tools/TOOL.py`. Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
 
 - `tools/check_sides.py --ring` (or a recording, a sets file, `--pair upper`, `--calib DIR`, `--json`): are the side cameras named right, from the scene? ft-handreplay's `--sides file|0|1|auto` replays with DIR/sides.json's names (the default), as recorded, exchanged, or as auto decides, and reports what the side check found and when.
 - `tools/check_color.py REC`: how the colour module's calibration maps onto its images.
@@ -212,7 +212,7 @@ Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, be
 - `tools/cut_sets.py REC OUT [--sets N | --at I,J,...]`: copies a few frame sets (by default 8, spread evenly) out of a recording into a small one, to look at or check elsewhere without moving gigabytes. Plain Python, so it also runs on the Frame's host.
 - `tools/convert_models.py`: how `models/ncnn` was made from the OpenCV Zoo ONNX ports of MediaPipe's models (see `models/NOTICE`).
 
-To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s]` (built by `screens/build.sh`, run in the dev container, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens.
+To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s]` (built by `screens/build.sh`, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens.
 
 ## Camera check
 
@@ -220,7 +220,7 @@ Hand tracking needs all four mono cameras and the headset's IR light. With the A
 
 `hands/camcheck.py` (system Python, standard library) tells whether the four cameras run: `ok`, `degraded: upper cameras and IR light off (VCINT FPGA failed to load)` (or another `degraded:` reason), or `unknown` (SteamVR not running, the cameras closed while the headset sleeps). It prints the log lines and other evidence it used; `--json` is for programs; the exit status is 0, 1 or 2. It reads:
 - the running XRService's log (`~/.local/share/Steam/logs/xrservice.txt`): the last camera start (from the FPGA check to the next "Closing tracking camera interfaces"), its VCINT result, `Upper cameras FPGA interleaving support: N`, `Created N tasks (T tracking, P passthrough)` and the `TrackingCameraInit` lines. A wake that works prints no "Created N tasks", so an older one doesn't count;
-- which `/dev/video*` XRService has open (`/proc/PID/fd`; video9 and video13 are the side pair, video6 and video7 the upper pair). Only on the host: the dev container can't read another process's open files, so there it's skipped;
+- which `/dev/video*` XRService has open (`/proc/PID/fd`; video9 and video13 are the side pair, video6 and video7 the upper pair). skipped when it can't be read;
 - ft-camd's ring header, when it runs: how many mono cameras it publishes.
 
 The hand recorder runs it before a session (DESIGN.md, "Camera check"). `hands/tests/test_camcheck.py` runs it on the 2026-10-02 log cut at several points, and on made-up logs.
@@ -239,7 +239,7 @@ It logs every decision to the journal. `ft-camwatch --once` prints the state and
 Read from the code on the experimental branch, not tried live:
 - ft-screens quits when SteamVR does: on `VREvent_Quit` it ends its Wayland display (`screens/vr.cpp`, `ft_vr_poll`; `screens/compositor.c`, `handle_vr_event`). It never connects to SteamVR again: `ft_vr_init` runs once, at its start.
 - KWin runs nested in ft-screens, so the Frametop desktop ends with it, every window in it too (the hand recorder's as well). Its unit, `frametop-desktop`, is a transient `systemd-run` unit with `Restart=no`, so the desktop doesn't come back by itself: start it again (Desktop in the library, or `desktops.sh start`).
-- When the unit stops, systemd ends what's left in it. `session/keep-apps.sh` moves programs started in the desktop out of the unit first, but only `desktops.sh stop` runs it; here they stop too. Programs in the dev container (ft-screens, the hand recorder) are in the container's cgroup and end when their Wayland connection goes.
+- When the unit stops, systemd ends what's left in it. `session/keep-apps.sh` moves programs started in the desktop out of the unit first, but only `desktops.sh stop` runs it; here they stop too.
 - The units that are `PartOf=steamvr.service` restart with it: `frametop-camd`, `frametop-hands`, the pointer helper, gaze and power, and the hand recorder's own transient ft-camd and ft-hands units.
 
 ### Verified, and what's a guess
@@ -259,7 +259,7 @@ Guesses, not tested:
 
 ## Build
 
-`hands/build.sh` builds in the dev container on the Frame, into `hands/build/`, with `hands/Makefile`. The first build fetches ncnn at a pinned tag (`NCNN_TAG` in the Makefile) and builds it into `hands/build/ncnn`, which takes a few minutes; `NCNN=DIR` points at an ncnn install already built instead. ft-camd is linked statically, because it runs on the host, which has an older glibc than the container.
+`hands/build.sh` builds on the Frame host, with the gcc, cmake and libraries its SteamOS image ships (jsoncpp, OpenMP), into `hands/build/`, with `hands/Makefile`. The first build fetches ncnn at a pinned tag (`NCNN_TAG` in the Makefile) and builds it into `hands/build/ncnn`, which takes a few minutes; `NCNN=DIR` points at an ncnn install already built instead. It also makes `hands/build/venv`, the host's Python with NumPy, OpenCV and huggingface_hub (`hands/requirements.txt`) for the tools and the hand recorder's upload, remade when that file changes.
 
 ## Known issues
 

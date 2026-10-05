@@ -17,9 +17,9 @@
 #                        18 s are recorded in all, a few hundred MB before compression
 #   --keep               keep the temporary folders (camera images of a room: delete them after)
 #
-# It runs in the dev container (where ft-hands, ft-handpanel, zstd and huggingface_hub are),
-# and in one frame-job scope when frame-job is installed, so it stays capped while the headset
-# is worn. Everything goes in temporary folders that are deleted at the end, and every process
+# It runs on the Frame host, with hands/build/venv's Python (huggingface_hub, from
+# hands/build.sh), and in one frame-job scope when frame-job is installed, so it stays capped
+# while the headset is worn. Everything goes in temporary folders that are deleted at the end, and every process
 # it started is stopped, also on Ctrl+C. A tracking ft-hands that's already running is used as
 # it is; otherwise one is started for the rehearsal (it publishes the usual hands file).
 set -euo pipefail
@@ -27,30 +27,11 @@ here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 root=$(cd "$here/../.." && pwd)
 uid=$(id -u)
 
-if [ ! -e /run/.containerenv ]; then
-  "$root/scripts/container-up.sh"
-  # Ctrl+C and kill don't reach through distrobox: the rehearsal inside writes its PID to this
-  # file, and a signal here is passed on to it, so it still cleans up.
-  pidfile=$(mktemp "/run/user/$uid/ft-handrec-rehearse-pid.XXXXXX")
-  # The real user bus, so frame-job's systemd-run reaches the host's user manager.
-  "$HOME/.local/bin/distrobox" enter dev -- env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-    XDG_RUNTIME_DIR="/run/user/$uid" FT_REHEARSE_PIDFILE="$pidfile" bash "$here/rehearse.sh" "$@" </dev/null &
-  child=$! stopping=0 status=0
-  pass_on() { [ -s "$pidfile" ] && kill -TERM "$(cat "$pidfile")" 2>/dev/null; return 0; }
-  trap 'stopping=1; pass_on' INT TERM HUP
-  while kill -0 "$child" 2>/dev/null; do
-    wait "$child" && status=0 || status=$?   # (set -e would end this on a signal)
-    [ "$stopping" = 0 ] || pass_on
-  done
-  rm -f "$pidfile"
-  exit "$status"
-fi
 if [ -z "${FT_REHEARSE_SCOPE:-}" ] && command -v frame-job >/dev/null; then
   export FT_REHEARSE_SCOPE=1
   cd /tmp   # no .frame-job up from here: it runs locally, capped
   exec frame-job --local -- bash "$here/rehearse.sh" "$@"
 fi
-[ -z "${FT_REHEARSE_PIDFILE:-}" ] || echo $$ >"$FT_REHEARSE_PIDFILE"
 
 repo="" capture="$HOME/Desktop/Projects/frame-hands/captures/rec-20260930-103803-lit" from=60 prompt_s=3 keep=0
 while [ $# -gt 0 ]; do
@@ -72,18 +53,20 @@ for b in "$ringplay" "$hands"; do
   [ -x "$b" ] || { echo "rehearse: $b isn't built: hands/build.sh --tools" >&2; exit 1; }
 done
 [ -x "$panel" ] || { echo "rehearse: $panel isn't built: hands/rec/build.sh" >&2; exit 1; }
+py=$root/hands/build/venv/bin/python
+[ -x "$py" ] || { echo "rehearse: $py isn't built: hands/build.sh" >&2; exit 1; }
 [ -f "$capture/sets.bin" ] || { echo "rehearse: no recording in $capture" >&2; exit 1; }
 if pgrep -x ft-handpanel >/dev/null; then
   echo "rehearse: an ft-handpanel is running (a real session?): try again when it's done" >&2
   exit 1
 fi
 if [ -n "$repo" ]; then
-  if python3 -c "import sys; sys.path.insert(0, '$here'); import hub; sys.exit(0 if hub.upload_allowed() else 1)"; then :; else
+  if "$py" -c "import sys; sys.path.insert(0, '$here'); import hub; sys.exit(0 if hub.upload_allowed() else 1)"; then :; else
     echo "rehearse: the texts are drafts: a real upload needs FT_HANDREC_ALLOW_UPLOAD=1 as well as --repo" >&2
     exit 1
   fi
-  python3 -c "import huggingface_hub" 2>/dev/null || {
-    echo "rehearse: huggingface_hub isn't installed: setup/dev-container.sh" >&2; exit 1; }
+  "$py" -c "import huggingface_hub" 2>/dev/null || {
+    echo "rehearse: huggingface_hub isn't installed: hands/build.sh" >&2; exit 1; }
 fi
 
 # The data: the ring in the runtime folder (memory), the rest in /tmp. Both go at the end.
@@ -120,17 +103,17 @@ step "1. Playing ${capture##*/} from ${from} s into $ring"
 "$ringplay" "$capture" --ring "$ring" --from "$from" --to "$((from + 30))" --loop >"$logs/ringplay.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 100); do
-  python3 -c "import sys; sys.path.insert(0, '$here'); import session
+  "$py" -c "import sys; sys.path.insert(0, '$here'); import session
 r = session.Ring('$ring'); sys.exit(0 if r.alive() else 1)" 2>/dev/null && break
   sleep 0.2
 done
-python3 -c "import sys; sys.path.insert(0, '$here'); import session
+"$py" -c "import sys; sys.path.insert(0, '$here'); import session
 r = session.Ring('$ring'); print('  cameras:', ', '.join('%s %dx%d' % (c['name'], c['width'], c['height']) for c in r.cams))
 sys.exit(0 if r.alive() else 1)" || { echo "rehearse: ft-ringplay doesn't publish: $(tail -3 "$logs/ringplay.log")" >&2; exit 1; }
 
 step "2. Session (test script, panel --no-vr)"
 tracker=existing
-if ! python3 -c "import sys; sys.path.insert(0, '$here'); import session; sys.exit(0 if session.tracker_running() else 1)"; then
+if ! "$py" -c "import sys; sys.path.insert(0, '$here'); import session; sys.exit(0 if session.tracker_running() else 1)"; then
   "$hands" --ring "$ring" --no-gestures --status 0 >"$logs/tracker.log" 2>&1 &
   pids+=($!)
   tracker=started
@@ -138,7 +121,7 @@ fi
 echo "  tracker: $tracker"
 "$panel" --no-vr >"$logs/panel.log" 2>&1 &
 pids+=($!)
-python3 - "$here" "$base" "$prompt_s" "$work/script.json" <<'EOF'
+"$py" - "$here" "$base" "$prompt_s" "$work/script.json" <<'EOF'
 import json, os, re, sys, uuid
 here, base, secs, out = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
 consent = re.search(r"^Version:\s*(\S+)", open(os.path.join(here, "CONSENT.md")).read(), re.M).group(1)
@@ -160,27 +143,27 @@ json.dump({"version": 1, "intro_s": 1, "between_s": 1,
           open(out, "w"))
 EOF
 for _ in $(seq 50); do
-  python3 -c "import sys; sys.path.insert(0, '$here'); import session
+  "$py" -c "import sys; sys.path.insert(0, '$here'); import session
 sys.exit(0 if session.Panel().cmd('ping', reply=True) else 1)" 2>/dev/null && break
   sleep 0.2
 done
-run python3 "$here/session.py" --ring "$ring" --no-start --base "$base" --script "$work/script.json" --lighting room \
+run "$py" "$here/session.py" --ring "$ring" --no-start --base "$base" --script "$work/script.json" --lighting room \
   --next-after 0.3 \
   </dev/null > >(indent)
 sid=$(ls "$base/sessions" | tail -1)
 [ -n "$sid" ] || { echo "rehearse: the session left nothing" >&2; exit 1; }
-python3 "$here/takes.py" --base "$base" takes "$sid" | sed 's/^/  /'
+"$py" "$here/takes.py" --base "$base" takes "$sid" | sed 's/^/  /'
 echo "  panel pictures: $(grep -c '^--- picture' "$logs/panel.log" || true)"
 
 step "3. Export"
-run python3 "$here/takes.py" --base "$base" export "$sid" >"$logs/export.log"
+run "$py" "$here/takes.py" --base "$base" export "$sid" >"$logs/export.log"
 tr '\r' '\n' <"$logs/export.log" | tail -1 | indent
 export_dir=$base/exports/$sid
 
 step "4. Validate"
 valid=1
-run python3 "$here/validate.py" "$export_dir" --json >"$work/validate.json" || valid=0
-python3 -c "import json, sys; v = json.load(open(sys.argv[1]))
+run "$py" "$here/validate.py" "$export_dir" --json >"$work/validate.json" || valid=0
+"$py" -c "import json, sys; v = json.load(open(sys.argv[1]))
 for k in ('errors', 'warnings'):
     for line in v[k]: print('  %s: %s' % (k[:-1], line))
 print('  OK' if v['ok'] else '  %d errors' % len(v['errors']))" "$work/validate.json"
@@ -188,16 +171,16 @@ print('  OK' if v['ok'] else '  %d errors' % len(v['errors']))" "$work/validate.
 
 if [ -n "$repo" ]; then
   step "5. Upload to $repo (for real)"
-  run env FT_HANDREC_DATASET="$repo" python3 "$here/hub.py" --base "$base" upload "$sid" >"$logs/hub.log"
+  run env FT_HANDREC_DATASET="$repo" "$py" "$here/hub.py" --base "$base" upload "$sid" >"$logs/hub.log"
   indent <"$logs/hub.log"
 else
   step "5. Upload (dry run: --repo ID uploads for real)"
-  run python3 "$here/hub.py" --base "$base" upload "$sid" --dry-run >"$logs/hub.log"
+  run "$py" "$here/hub.py" --base "$base" upload "$sid" --dry-run >"$logs/hub.log"
   indent <"$logs/hub.log"
 fi
 
 step "Summary"
-python3 - "$work/validate.json" "$logs/hub.log" "$tracker" "$(( $(date +%s) - t0 ))" <<'EOF'
+"$py" - "$work/validate.json" "$logs/hub.log" "$tracker" "$(( $(date +%s) - t0 ))" <<'EOF'
 import json, sys
 v = json.load(open(sys.argv[1]))
 s = v["summary"]
