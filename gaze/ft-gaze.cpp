@@ -692,10 +692,15 @@ int main(int argc, char **argv) {
                 }
             }
 
-            // Our tracker: its own sample time picks the head pose, like the mmap's.
+            // Our tracker: its own sample time picks the head pose, like the mmap's. A sample is
+            // taken until kOwnStale after its frame: ft-eyegrab hands a frame over once the camera
+            // has moved on two slots, 22 ms at 90 fps but 133 ms at the 15 fps SteamOS 0.4.3 runs
+            // the eye cameras at while SteamVR itself doesn't use them, and the next frame then
+            // comes 67 ms later.
+            constexpr double kOwnStale = 0.35;
             std::string own = "{\"ok\":0}";
             OwnSample o;
-            if ((want & kOwn) && ownFile.Read(o) && now - o.t < 0.1) {
+            if ((want & kOwn) && ownFile.Read(o) && now - o.t < kOwnStale) {
                 vr::HmdMatrix34_t headOwn = headNow;
                 history.At(o.t, headOwn);
                 auto pair = [](bool ok, float a, float b) {
