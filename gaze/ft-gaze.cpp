@@ -172,6 +172,19 @@ bool ReadSample(const EyeFile &f, EyeSample &s) {
     return false;
 }
 
+// Is the file's layout the one read here? Its gaze vectors are unit length, or zero while an eye
+// is lost; a file whose fields moved (a SteamOS update) has other numbers there. 0 while nothing
+// says yet (all zero before the tracker's first sample), 1 yes, -1 no.
+int LayoutVerdict(const EyeSample &s) {
+    int unit = 0, other = 0;
+    for (const Vec3 &v : {s.left1, s.right1, s.left2, s.right2}) {
+        const double l = Length(v);
+        if (!std::isfinite(l) || (l > 1e-6 && std::fabs(l - 1) > 0.02)) ++other;
+        else if (l > 1e-6) ++unit;
+    }
+    return unit >= 2 ? 1 : other >= 2 ? -1 : 0;
+}
+
 // --- Our own tracker: /dev/shm/frametop-eyes-gaze, written by gaze/tracker/ft-eyes ---
 // Layout (ft-eyes' docstring): u32 seq (odd while written), u32 version, f64 t, f32 yaw,
 // pitch, u32 flags (bit 0 right eye, 1 left, 2 right slip known, 3 left), u32 n, then f32
@@ -389,6 +402,21 @@ std::string HitJson(const std::vector<Screen> &screens, const vr::HmdMatrix34_t 
     return buf;
 }
 
+// JSON has no NaN or infinity, and the gaze service's reader drops a line with one in it. A number
+// that isn't finite (noise from a file whose layout changed, a zero-length vector) becomes null,
+// so the sample's other sources still arrive. Only values: keys and strings are quoted.
+std::string Finite(const char *line) {
+    std::string s = line;
+    for (size_t i = 0; (i = s.find_first_of("ni", i)) != std::string::npos; ++i) {
+        if (s.compare(i, 3, "nan") != 0 && s.compare(i, 3, "inf") != 0) continue;
+        size_t start = i;
+        if (start > 0 && s[start - 1] == '-') --start;
+        if (start == 0 || !std::strchr(":[,", s[start - 1])) continue;
+        s.replace(start, i + 3 - start, "null");
+    }
+    return s;
+}
+
 std::string SrcJson(const std::vector<Screen> &screens, const vr::HmdMatrix34_t &head, Vec3 dHead,
                     const std::string &extra = "") {
     double yaw, pitch;
@@ -525,7 +553,9 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "ft-gaze: action manifest %s: error %d\n", manifest.c_str(), int(me));
 
     EyeFile eyes;
-    const bool haveMmap = eyes.Open();
+    bool haveMmap = eyes.Open();  // off again if its layout isn't the one read here (below)
+    int layout = 0;               // LayoutVerdict, once it says
+    bool seenCounter = false;
     std::fprintf(stderr, "ft-gaze: eye-server.mmap %s\n", haveMmap ? "open" : "not available");
 
     OwnFile ownFile;
@@ -562,7 +592,27 @@ int main(int argc, char **argv) {
         // One line per new eye sample, or at 90 Hz without the mmap.
         EyeSample s;
         bool fresh = false;
-        if (haveMmap && ReadSample(eyes, s) && s.n != lastN) fresh = true, lastN = s.n;
+        if (haveMmap && ReadSample(eyes, s)) {
+            // With the layout read here, the vectors are unit length and a new sample's time is this
+            // clock's. Otherwise a SteamOS update moved the fields (scripts/update-check.py says so
+            // too) and what's read is noise: SteamVR's mmap sources go off, and the gaze action and
+            // our own tracker go on. The first read only gives a counter to compare with, since an
+            // idle tracker's last sample is old with any layout.
+            if (layout == 0) layout = LayoutVerdict(s);
+            const bool newSample = s.n != lastN;
+            const char *wrong = layout < 0 ? "its gaze vectors aren't unit length"
+                                : newSample && seenCounter && std::fabs(now - s.t) > 5.0 ? "a new sample's time is off this clock"
+                                : nullptr;
+            if (wrong) {
+                std::fprintf(stderr, "ft-gaze: eye-server.mmap: %s, so its layout changed (a SteamOS update?): SteamVR's "
+                             "mmap sources are off; the gaze action and our own tracker still work. See "
+                             "scripts/update-check.py\n", wrong);
+                haveMmap = false;
+            } else if (newSample) {
+                if (seenCounter) fresh = true;
+                lastN = s.n, seenCounter = true;
+            }
+        }
         if (!haveMmap && now - lastEmit >= 1.0 / 90) fresh = true, s.t = now;
 
         if (fresh && hp.bPoseIsValid) {
@@ -673,11 +723,14 @@ int main(int argc, char **argv) {
             const Vec3 f = Rotate(headNow, {0, 0, -1});
             yaw = std::atan2(-f.x, -f.z) * 180 / M_PI;
             pitch = std::asin(std::clamp(f.y, -1.0, 1.0)) * 180 / M_PI;
-            std::printf("{\"t\":%.5f,\"age\":%.1f,\"n\":%u,\"head\":{\"yaw\":%.4f,\"pitch\":%.4f,\"hit\":%s},"
-                        "\"src\":{\"action\":%s,\"mmap1\":%s,\"mmap2\":%s,\"left\":%s,\"right\":%s,\"own\":%s},"
-                        "\"eye\":%s}\n",
-                        s.t, (now - s.t) * 1000, s.n, yaw, pitch, HitJson(list, headNow, 0, 0).c_str(), action.c_str(),
-                        m1.c_str(), m2.c_str(), left.c_str(), right.c_str(), own.c_str(), eye.c_str());
+            char line[4096];
+            std::snprintf(line, sizeof line,
+                          "{\"t\":%.5f,\"age\":%.1f,\"n\":%u,\"head\":{\"yaw\":%.4f,\"pitch\":%.4f,\"hit\":%s},"
+                          "\"src\":{\"action\":%s,\"mmap1\":%s,\"mmap2\":%s,\"left\":%s,\"right\":%s,\"own\":%s},"
+                          "\"eye\":%s}\n",
+                          s.t, (now - s.t) * 1000, s.n, yaw, pitch, HitJson(list, headNow, 0, 0).c_str(), action.c_str(),
+                          m1.c_str(), m2.c_str(), left.c_str(), right.c_str(), own.c_str(), eye.c_str());
+            std::fputs(Finite(line).c_str(), stdout);
             if (std::fflush(stdout) != 0) break;  // the reader went away
         }
 

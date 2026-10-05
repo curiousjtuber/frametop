@@ -224,6 +224,7 @@ class Checks:
         self.last_quick = 0.0
         self.sample_at = 0.0     # the tracker last sent anything
         self.seen_at = 0.0       # eyes last seen (SteamVR's tracker's variance for them, "unc")
+        self.mmap_seen = False   # SteamVR's mmap gave a gaze this run (else eyes_seen falls back to "worn")
         self.away = True         # no eyes for AWAY_MIN: their coming back is the headset going on
         self.back_since = None
         self.reseat_seen = False
@@ -332,11 +333,17 @@ class Checks:
         return svc.models[svc.source].samples > 0
 
     def eyes_seen(self, within=1.0):
-        return time.monotonic() - self.seen_at < within
+        """A tracker saw the eyes this recently; or, while SteamVR's mmap gives nothing (a SteamOS
+        whose eye-server.mmap layout changed: ft-gaze turns it off and says so), the pointer helper
+        says someone wears the headset."""
+        if time.monotonic() - self.seen_at < within:
+            return True
+        return not self.mmap_seen and self.headset is True
 
     def can_run(self):
-        """Someone's in the headset and the tracker is sending."""
-        return self.eyes_seen() and time.monotonic() - self.svc.last_sample < 2
+        """Someone's in the headset and the tracker is sending (any sample: before its first
+        calibration our own tracker sends no gaze, and the full check is what makes one)."""
+        return self.eyes_seen() and time.monotonic() - self.sample_at < 2
 
     def on_gaze_on(self):
         self.full_armed = True
@@ -355,7 +362,7 @@ class Checks:
         if not self.can_run() and self.svc.waking():
             return  # the tracker is still starting (the service idled)
         if not self.can_run():
-            why = ("the eye tracker isn't sending" if now - self.svc.last_sample >= 2
+            why = ("the eye tracker isn't sending" if now - self.sample_at >= 2
                    else "no eyes seen (is the headset on?)")
         elif now < self.full_retry_at:
             return
@@ -505,8 +512,13 @@ class Checks:
         self.sample_at = time.monotonic()
         if self.pending:
             self.run_pending()
+        # SteamVR's tracker sees an eye (its variance), or ours found one (without SteamVR's mmap,
+        # as on a SteamOS whose eye-server.mmap layout changed, ours is all there is).
         unc = (s["src"].get("mmap1") or {}).get("unc")
-        if unc and min(unc) <= EYE_LOST:
+        own_eyes = (s["src"].get("own") or {}).get("eyes") or []
+        if "hy" in (s["src"].get("mmap1") or {}):
+            self.mmap_seen = True
+        if (unc and min(unc) <= EYE_LOST) or any(own_eyes):
             self.seen_at = time.monotonic()
             if self.away and self.back_since is None:
                 self.back_since = self.seen_at
@@ -518,6 +530,12 @@ class Checks:
             return
         if c["own"]:
             src = s["src"].get("own") or {}
+            if "hy" not in src and c["kind"] == "full" and not self.calibrated():
+                # Before its first calibration our tracker sends pupils and no gaze (ft-eyes publishes
+                # one only with a calibration). Take the dot as the gaze: the capture asks ft-eyes for
+                # the pupils over the window, and ft-eyes rejects a window where they moved.
+                yaw, pitch, _ = c["dots"][c["i"]]
+                src = {"hy": yaw, "hp": pitch}
         else:
             src = s["src"].get("mmap1") or {}
             if "hy" not in src:
