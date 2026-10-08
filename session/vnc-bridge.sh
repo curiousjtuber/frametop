@@ -2,8 +2,9 @@
 # Runs on the Frame host. Serves the Frametop desktop's primary screen (the one with the
 # taskbar) over VNC for clients like RealVNC Viewer or macOS Screen Sharing. No VNC server
 # here can capture KWin directly, so this bridges through krdp: Xvnc (a virtual X screen
-# served over VNC) runs a FreeRDP client connected to krdpserver on 127.0.0.1. Both run in
-# the dev container. VNC listens on the tailnet address only.
+# served over VNC) runs a FreeRDP client connected to krdpserver (remote-desktop.sh) on
+# 127.0.0.1; RDP clients on the LAN or the tailnet connect to the same server directly.
+# Both run in the dev container. VNC listens on the tailnet address only.
 # Started by frametop-session.sh when REMOTE=1, after remote-desktop.sh.
 #
 # krdp streams the whole workspace (every screen). Its --monitor would stream one screen,
@@ -43,7 +44,7 @@ fi
 
 # Wait for krdpserver (started by remote-desktop.sh).
 for _ in $(seq 60); do
-  ss -ltn | grep -q "127.0.0.1:$rdp_port " && break
+  ss -ltn | grep -q ":$rdp_port " && break
   sleep 1
 done
 
@@ -114,13 +115,13 @@ stamp() { stat -c %y "${layout_files[@]}" 2>/dev/null || true; }
 start_rdp() {
   read -r x y w h ww wh <<< "$v"
   box env DISPLAY=$display bash -c '
-    size=$1 x=$2 y=$3 ww=$4 wh=$5 creds=$6 rdp_port=$7
+    size=$1 x=$2 y=$3 ww=$4 wh=$5 creds=$6 rdp=$7
     if [ "$(xrandr | sed -n "s/.*current \([0-9]*\) x \([0-9]*\),.*/\1x\2/p")" != "$size" ]; then
       xrandr --newmode "$size" 0 "${size%x*}" 0 0 0 "${size#*x}" 0 0 0 2>/dev/null || true
       xrandr --addmode VNC-0 "$size" 2>/dev/null || true
       xrandr --fb "$size" --output VNC-0 --mode "$size"
     fi
-    xfreerdp /v:127.0.0.1:"$rdp_port" /u:"$(id -un)" /p:"$(cat "$creds/password")" \
+    xfreerdp /v:"$rdp" /u:"$(id -un)" /p:"$(cat "$creds/rdp-password")" \
       /cert:ignore /size:"${ww}x${wh}" -decorations +clipboard >/dev/null 2>&1 &
     rdp=$!
     # FreeRDP takes no negative position, so move its window once it is up.
@@ -132,7 +133,7 @@ start_rdp() {
     done
     [ -n "$win" ] && xdotool windowmove "$win" "$((-x))" "$((-y))"
     wait $rdp
-  ' vnc-rdp "${w}x$h" "$x" "$y" "$ww" "$wh" "$creds" "$rdp_port" || true &
+  ' vnc-rdp "${w}x$h" "$x" "$y" "$ww" "$wh" "$creds" "127.0.0.1:$rdp_port" || true &
   rdp=$!
 }
 
