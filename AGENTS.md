@@ -17,7 +17,7 @@ scripts/frame.sh -C <dir> '<cmd>'        # runs in the "dev" Fedora distrobox
 
 - From a PC, edit only on the PC. The Frame's copy is a mirror that `sync.sh` overwrites.
 - Build on the SteamOS host, with the gcc, meson and library headers its image ships; the programs run there too. The root is read-only, so what the host lacks goes in the repo's `build/` folders: ft-screens' wlroots is built there as a static library, and Python packages go in venvs (`setup/pyside-venv.sh`, `gaze/tracker/build.sh`, `hands/build.sh`).
-- The `dev` container is optional: only Remote Access (Fedora's krdp, FreeRDP, TigerVNC) uses it. Its packages go in the list in `setup/dev-container.sh`, so the container can be rebuilt.
+- The `dev` container is optional: only Remote Access (Fedora's krdp, FreeRDP, TigerVNC) uses it. Its packages go in the list in `setup/dev-container.sh`, so the container can be rebuilt. Fedora packages that need holding at a version, or a patch, go in `setup/container-pins.sh` (FreeRDP and kpipewire are there now; `setup/README.md` says why), never into the container by hand.
 - Build output goes in `build/` next to the sources. It's gitignored and never synced.
 
 ## The headset may be in use
