@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Frametop
+Comment=Plasma desktop across several VR screens
+Exec=@SESSION@
+Categories=Utility;
+
+# Installed by desktops.sh install into ~/.local/share/applications, where SteamVR's
+# Launch a program list picks it up next to the stock Desktop entry, which stays as it
+# is. (Earlier installs overrode that entry, deckard-nested-desktop.desktop, instead;
+# desktops.sh install removes the override.) Same art and controller template as the
+# stock desktop; no X-Steam-Special, which is what makes the stock entry the Desktop button.
+Icon=desktop
+X-Steam-Library-Capsule=/usr/share/applications/steam/steamos-nested-desktop/capsule.png
+X-Steam-Library-Hero=/usr/share/applications/steam/steamos-nested-desktop/hero.png
+X-Steam-Library-Logo=/usr/share/applications/steam/steamos-nested-desktop/logo.png
+X-Steam-Library-StoreCapsule=/usr/share/applications/steam/steamos-nested-desktop/store-logo.png
+X-Steam-Controller-Template=Desktop

@@ -4,13 +4,13 @@ How each part of Frametop works, where its settings live, and the commands for r
 
 ## The desktop
 
-From the headset, open Launch a program → Desktop. The installer replaces that launcher entry with Frametop's (`~/.local/share/applications/deckard-nested-desktop.desktop`), and `desktops.sh uninstall` gives the stock single-screen desktop back.
+From the headset, open Launch a program → Frametop. The installer adds that entry (`~/.local/share/applications/frametop.desktop`) next to the stock Desktop one, which stays as it is, and the two can run at the same time: they are separate Plasma sessions with separate config, and SteamVR shows Frametop's screens beside the stock desktop's panel. Installs before 2026-10-08 replaced the Desktop entry instead; `desktops.sh install` removes that override.
 
 From a terminal, on the Frame or from a PC over SSH:
 
 ```
-desktops.sh install        # the launcher's Desktop entry starts Frametop
-desktops.sh uninstall      # back to the stock SteamOS desktop
+desktops.sh install        # add Frametop to the launcher's Launch a program list
+desktops.sh uninstall      # remove it
 desktops.sh start | stop | restart | status | log [lines]
 ```
 
