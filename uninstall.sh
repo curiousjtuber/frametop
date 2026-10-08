@@ -9,7 +9,7 @@
 #
 # It never stops what you're using now: the input relay carries the keyboard and mouse, and the
 # desktop runs from the repo. So it goes in two steps:
-#   1. Frametop stops starting. The launcher's Desktop entry goes back to the stock desktop, and
+#   1. Frametop stops starting. Its launcher entry goes (older installs' Desktop override too), and
 #      Frametop's services, SteamVR driver, menu entries, and system files (our eye tracker's
 #      frame grabber and the Bluetooth fixes, with sudo) are removed. What runs now keeps running
 #      until you restart the headset.
@@ -33,7 +33,8 @@ EOF
 
 dry=0
 apps=$HOME/.local/share/applications
-override=$apps/deckard-nested-desktop.desktop
+entry=$apps/frametop.desktop
+override=$apps/deckard-nested-desktop.desktop  # older installs replaced the stock Desktop entry
 relay_unit=$HOME/.config/systemd/user/frametop-input-relay.service
 driver=$HOME/.local/share/frametop/ft_pointer
 vrpathreg=/opt/steamvr/bin/linuxarm64/vrpathreg
@@ -67,7 +68,7 @@ find_repo() {  # sets repo, and app when the code runs from a non-default instal
   [ -n "$dir" ] && { repo=$dir; return; }
   # The launcher entry and the relay's unit point into the code, until step 1 removes them:
   # the installed copy, or the repo itself (install.sh --prefix .).
-  p=$(sed -n 's#^Exec=\(.*\)/session/frametop-session\.sh.*#\1#p' "$override" 2>/dev/null | head -1)
+  p=$(sed -n 's#^Exec=\(.*\)/session/frametop-session\.sh.*#\1#p' "$entry" "$override" 2>/dev/null | head -1)
   [ -z "$p" ] && p=$(sed -n 's#^ExecStart=/usr/bin/python3 \(.*\)/input/input-relay\.py.*#\1#p' "$relay_unit" 2>/dev/null | head -1)
   if [ -n "$p" ] && is_app "$p"; then app=$p; p=; fi
   [ -z "$p" ] && [ -f "${BASH_SOURCE[0]:-}" ] && p=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -112,6 +113,7 @@ main() {
 
   # Step 1: what makes Frametop start. Nothing here stops a running program.
   [ -f "$override" ] && grep -q 'Frametop' "$override" || override=
+  [ -f "$entry" ] || entry=
   units=("$HOME"/.config/systemd/user/frametop-*.service)
   for f in ft-input-settings ft-display-settings ft-layout-reset ft-screens-toggle ft-remote-settings ft-gazeprobe; do
     [ -e "$apps/$f.desktop" ] && entries+=("$apps/$f.desktop")
@@ -121,10 +123,11 @@ main() {
   [ -L "$handsctl" ] || handsctl=
   exists "${eyegrab_files[@]}" "${bt_files[@]}" && sys=1
 
-  if [ -n "$override" ] || [ ${#units[@]} -gt 0 ] || [ ${#entries[@]} -gt 0 ] || [ -d "$driver" ] ||
+  if [ -n "$entry" ] || [ -n "$override" ] || [ ${#units[@]} -gt 0 ] || [ ${#entries[@]} -gt 0 ] || [ -d "$driver" ] ||
      [ -n "$handsctl" ] || [ "$sys" = 1 ]; then
     step "Step 1 of 2: stop Frametop from starting"
     echo "This removes:"
+    [ -n "$entry" ] && echo "  - the launcher's Frametop entry"
     [ -n "$override" ] && echo "  - the launcher's Desktop entry (Launch a program -> Desktop opens the stock desktop again)"
     for f in "${units[@]}"; do echo "  - the service $(basename "$f")"; done
     [ -d "$driver" ] && echo "  - the 3D mouse's SteamVR driver (ft_pointer)"
@@ -136,6 +139,7 @@ main() {
     echo "this terminal keep working. Your settings and the code stay for now."
     ask "Uninstall Frametop?" n || { echo "Nothing changed."; return 0; }
 
+    [ -n "$entry" ] && run rm -f "$entry"
     [ -n "$override" ] && run rm -f "$override"
     if [ ${#units[@]} -gt 0 ]; then
       for f in "${units[@]}"; do names+=("$(basename "$f")"); done

@@ -33,7 +33,7 @@ HOME = os.path.expanduser("~")
 UID = os.getuid()
 KNOWN_GOOD = os.path.join(HOME, ".local/state/frametop/known-good.json")
 STEAMVR_BIN = "/opt/steamvr/bin/linuxarm64"
-LAUNCHER = os.path.join(HOME, ".local/share/applications/deckard-nested-desktop.desktop")
+LAUNCHER = os.path.join(HOME, ".local/share/applications/frametop.desktop")
 VRPATHS = os.path.join(HOME, ".config/openvr/openvrpaths.vrpath")
 # The Frametop desktop has its own XDG_CONFIG_HOME (session/frametop-session.sh). An install from a
 # terminal there, before pointer/driver/install.sh set SteamVR's, left vrpathreg's registry here.
@@ -180,7 +180,7 @@ def check_host():
         ("/usr/share/deckard/mesavars.sh", "warn", "the desktop starts without SteamOS's Mesa settings"),
         ("/etc/profile.d/flatpak.sh", "warn", "Flatpak apps may open Discover instead of starting"),
         ("/usr/share/applications/deckard-nested-desktop.desktop", "warn",
-         "SteamOS's Desktop launcher entry is gone or renamed, so Frametop's copy may not replace it"),
+         "SteamOS's Desktop launcher entry is gone or renamed; Frametop's entry borrows its art and controller template"),
     ]
     missing = [n for n in needed if not os.path.exists(n[0])]
     for path, state, effect in missing:
@@ -251,12 +251,12 @@ def check_host():
 
     session = launcher_session()
     if session is None:
-        report("warn", "launcher", "Launch a program -> Desktop starts the stock desktop "
-               "(./desktops.sh install brings Frametop back)")
+        report("warn", "launcher", "Launch a program has no Frametop entry "
+               "(./desktops.sh install adds it)")
     elif os.path.isfile(session):
-        report("ok", "launcher", f"Desktop starts {session}")
+        report("ok", "launcher", f"Launch a program -> Frametop starts {session}")
     else:
-        report("FAIL", "launcher", f"Desktop starts {session}, which doesn't exist")
+        report("FAIL", "launcher", f"Launch a program -> Frametop starts {session}, which doesn't exist")
 
     if systemctl("is-enabled", "frametop-power") == "enabled":
         if os.access(BACKLIGHT, os.W_OK):

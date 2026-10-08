@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Start, stop, or inspect the multi-screen Plasma desktop in VR on the Frame.
 # Usage: desktops.sh start [screens] | stop | restart | status | log [lines]
-#        desktops.sh install     # make the VR launcher's "Desktop" entry start Frametop
-#        desktops.sh uninstall   # give the launcher back the stock SteamOS desktop
+#        desktops.sh install     # add Frametop to the VR launcher's Launch a program list
+#        desktops.sh uninstall   # remove it (the stock Desktop entry is never touched)
 #        desktops.sh screens N   # set the default screen count in ~/.config/frametop.conf
 #        desktops.sh remote on|off|info  # VNC and RDP access over the tailnet (applies on next start)
 #        desktops.sh relay install|uninstall|status|log  # input relay service (see input/input-relay.py)
@@ -15,7 +15,8 @@ frame="$root/scripts/frame.sh"
 action=${1:-start}
 screens=${2:-${FT_SCREENS:-}}
 session=$FRAME_REPO/session
-override=.local/share/applications/deckard-nested-desktop.desktop
+entry=.local/share/applications/frametop.desktop
+override=.local/share/applications/deckard-nested-desktop.desktop  # how older installs replaced the Desktop entry
 log=/tmp/frametop-session.log
 # Bracketed first letter so pgrep/pkill never match the ssh shell running them.
 match='[v]r-overlay-key frametop '
@@ -37,15 +38,16 @@ $running && echo 'started' || { echo 'failed:'; tail -20 $log; exit 1; }" ;;
   install)
     "$root/scripts/sync.sh" >/dev/null
     "$frame" --host "set -e; mkdir -p ~/.local/share/applications
-sed 's|@SESSION@|$session/frametop-session.sh|' $session/deckard-nested-desktop.desktop > ~/$override
+sed 's|@SESSION@|$session/frametop-session.sh|' $session/frametop.desktop > ~/$entry
+rm -f ~/$override
 [ -f ~/.config/frametop.conf ] || cp $session/frametop.conf.example ~/.config/frametop.conf
-echo \"installed ~/$override\"; grep ^Exec= ~/$override; echo; cat ~/.config/frametop.conf" ;;
+echo \"installed ~/$entry (Launch a program -> Frametop; Desktop stays the stock desktop)\"; grep ^Exec= ~/$entry; echo; cat ~/.config/frametop.conf" ;;
   uninstall)
     # Also what the session puts in place at each start: Launch as Standalone's app copies and
     # the title bar decoration (float/ft_apps.py, decoration/).
-    "$frame" --host "rm -f ~/$override
+    "$frame" --host "rm -f ~/$entry ~/$override
 rm -rf ~/.local/share/frametop/apps ~/.local/share/kwin/decorations/kwin4_decoration_qml_frametop
-rmdir ~/.local/share/frametop 2>/dev/null; echo 'removed; the launcher uses the stock desktop again'" ;;
+rmdir ~/.local/share/frametop 2>/dev/null; echo 'removed from the launcher'" ;;
   screens)
     [[ ${2:-} =~ ^[1-9]$ ]] || { echo "usage: $0 screens N   (1-9)" >&2; exit 2; }
     "$frame" --host "set -e; f=~/.config/frametop.conf
