@@ -24,6 +24,14 @@ setup/dev-container.sh
 
 Only Remote Access (Fedora's krdp, FreeRDP and TigerVNC) needs it; `install.sh` asks. It creates the `dev` distrobox if it's missing and installs the packages listed in the script, which is the source of truth for the container. It also links `/opt/steamvr` to the host's SteamVR, so OpenVR programs built there can find the runtime. It's safe to re-run, for example after adding a package to the list.
 
+It ends by running `setup/container-pins.sh` inside the container, which rebuilds two Fedora packages with a patch and holds them there, because the container's rolling updates broke Remote Access twice in one week (a black VNC screen both times):
+
+- FreeRDP is Fedora's own. The script used to hold it at 3.31.1: FreeRDP 3.32 turns on extended security for server-side NLA, and stock krdp 6.7.5 then rejects every login with "Could not find user in SAM database" in `/tmp/frametop-remote.log` ([FreeRDP issue 13567](https://github.com/FreeRDP/FreeRDP/issues/13567), [KRdp merge request 248](https://invent.kde.org/plasma/krdp/-/merge_requests/248)). The krdp backport below carries krdp's fix for that, so a re-run lifts the old hold and brings FreeRDP back to Fedora's.
+- krdp is rebuilt with `setup/patches/krdp-nla-backport.patch`, krdp 6.8's three NLA commits unchanged. krdp 6.7.5 has no NLA: it takes the password over TLS and compares it with the one from the client's Info PDU, which FreeRDP 3.32 clients (krdc 26.08) leave empty, so every krdc login ended in "PostConnect for peer failed". With the patch, logins are checked with NLA against a SAM file, which works with every client. The build is tagged `.frametop2`: `.frametop1` came from an earlier patch that skipped the comparison instead, which let any password in, and the new tag makes a re-run replace it. Same rebuild mechanism as kpipewire's below, and skipped once Fedora's krdp has NLA.
+- kpipewire is rebuilt with `setup/patches/kpipewire-cursor-bitmap-size.patch`. Its cursor handling copies `stride * height * 4` bytes of the cursor bitmap, but stride is already in bytes, so it reads far past the metadata. The Frametop desktop's cursor is 256 px (`XCURSOR_SIZE` from gamescope), so the over-read is 768 KiB and krdpserver segfaults the moment a frame carries a cursor bitmap (`coredumpctl list krdpserver` on the host shows it). The rebuild pulls rpm-build and kpipewire's build dependencies (about 40 MB) and takes a few minutes on the Frame; it's skipped automatically once Fedora's source no longer has the line.
+
+`dnf upgrade` in the container keeps all the locks. Re-run `setup/container-pins.sh` (or `setup/dev-container.sh`) after rebuilding the container.
+
 ## Bluetooth LE mice and keyboards
 
 ### Why this is needed
