@@ -256,8 +256,8 @@ cursor_theme=$(kreadconfig6 --file kcminputrc --group Mouse --key cursorTheme)
 cursor_size=$(kreadconfig6 --file kcminputrc --group Mouse --key cursorSize)
 export XCURSOR_THEME=${cursor_theme:-breeze_cursors} XCURSOR_SIZE=${cursor_size:-24}
 
-# Remote desktop over VNC: session/remote-desktop.sh captures the desktop with
-# krdp on 127.0.0.1, and session/vnc-bridge.sh re-serves its primary screen over VNC. krdpserver runs from the container, so KWin can't
+# Remote desktop: session/remote-desktop.sh captures the desktop with krdp and serves it
+# over RDP, and session/vnc-bridge.sh re-serves its primary screen over VNC. krdpserver runs from the container, so KWin can't
 # match it to an installed app. KWin's permission check for screencast and fake
 # input is turned off for this nested session only, and so is the check on KWin's
 # D-Bus screenshot interface, which scripts use to see the screens without the headset.

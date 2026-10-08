@@ -203,9 +203,9 @@ Moved to [reference-features.md](reference-features.md#gaze-pointer-experimental
 
 Moved to [reference-features.md](reference-features.md#hand-tracking-experimental).
 
-## Remote desktop over VNC
+## Remote desktop over RDP and VNC
 
-Moved to [reference-features.md](reference-features.md#remote-desktop-over-vnc).
+Moved to [reference-features.md](reference-features.md#remote-desktop-over-rdp-and-vnc).
 
 ## Limits
 

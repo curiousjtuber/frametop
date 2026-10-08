@@ -6,7 +6,7 @@
 #        desktops.sh uninstall   # give the launcher back the stock SteamOS desktop
 #        desktops.sh screens N   # set the default screen count in ~/.config/frametop.conf
 #        desktops.sh autostart on|off|status  # start the desktop whenever SteamVR starts (and so at boot)
-#        desktops.sh remote on|off|info  # VNC access over the tailnet (applies on next start)
+#        desktops.sh remote on|off|info  # VNC and RDP access over the tailnet (applies on next start)
 #        desktops.sh relay install|uninstall|status|log  # input relay service (see input/input-relay.py)
 # start without a count uses the Frame's config. FT_WIDTH, FT_HEIGHT, FT_PHYS_WIDTH pass through.
 set -euo pipefail
@@ -92,14 +92,15 @@ journalctl --user -u $autostart_unit --no-pager -o cat -n 3" ;;
         v=$([ "$2" = on ] && echo 1 || echo 0)
         "$frame" --host "set -e; f=~/.config/frametop.conf
 [ -f \$f ] || cp $session/frametop.conf.example \$f
-grep -q '^REMOTE=' \$f || echo 'REMOTE=0           # 1 = serve the desktop over VNC on the tailnet (port 5900)' >> \$f
+grep -q '^REMOTE=' \$f || echo 'REMOTE=0           # 1 = serve the desktop over RDP (LAN and tailnet, port 3390) and VNC (tailnet, port 5900)' >> \$f
 sed -i 's/^REMOTE=[01]/REMOTE=$v/' \$f; grep ^REMOTE \$f; echo 'applies the next time the desktop starts'" ;;
       info)
         "$frame" --host "grep ^REMOTE ~/.config/frametop.conf 2>/dev/null || echo 'REMOTE not set'
 ip=\$(ip -4 -o addr show tailscale0 | awk '{print \$4}' | cut -d/ -f1)
-echo \"VNC: \$(hostname):5900 on the tailnet (\$ip)  password \$(cat ~/.config/frametop-remote/vnc-password 2>/dev/null || echo '(created on first start)')\"
+echo \"VNC: \$(hostname):5900 on the tailnet (\$ip), the primary screen  password \$(cat ~/.config/frametop-remote/vnc-password 2>/dev/null || echo '(created on first start)')\"
+echo \"RDP: \$(hostname).local:3390 on the LAN and the tailnet (\$ip), every screen  user \$(id -un)  password \$(cat ~/.config/frametop-remote/rdp-password 2>/dev/null || echo '(created on first start)')\"
 if pgrep -f '[X]vnc :20 ' >/dev/null; then echo 'vnc: running'; else echo 'vnc: not running'; fi
-if pgrep -f '[k]rdpserver --plasma' >/dev/null; then echo 'capture (krdp, 127.0.0.1 only): running'; else echo 'capture (krdp): not running'; fi" ;;
+if pgrep -f '[k]rdpserver --plasma' >/dev/null; then echo 'rdp (krdp): running'; else echo 'rdp (krdp): not running'; fi" ;;
       *) echo "usage: $0 remote on|off|info" >&2; exit 2 ;;
     esac ;;
   relay)
