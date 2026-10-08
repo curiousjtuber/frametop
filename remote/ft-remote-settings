@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 """Frametop Remote Access: settings for seeing and using the Frametop desktop from another
-computer on your tailnet, over VNC (session/remote-desktop.sh and session/vnc-bridge.sh).
+computer, over RDP on the LAN or the tailnet (session/remote-desktop.sh) or over VNC on the
+tailnet (session/vnc-bridge.sh).
 
 A GTK 4 / libadwaita app on the Frame host's own Python (like the gaze probe). It turns remote
 access on and off (REMOTE in ~/.config/frametop.conf, applied now through
-session/remote-ctl.sh when this desktop allows it), shows the address to connect to, and shows,
-copies, or replaces the VNC password (~/.config/frametop-remote/vnc-password). Nothing is
-stored anywhere else, and no password is in the code: the first start makes a random one.
+session/remote-ctl.sh when this desktop allows it), shows the addresses to connect to, and
+shows, copies, or replaces the passwords (~/.config/frametop-remote/vnc-password and
+rdp-password). Nothing is stored anywhere else, and no password is in the code: the first start
+makes random ones.
 """
 import os
 import secrets
@@ -25,6 +27,7 @@ CTL = os.path.join(REPO, "session", "remote-ctl.sh")
 CONF = os.path.expanduser("~/.config/frametop.conf")
 CREDS = os.path.expanduser("~/.config/frametop-remote")
 VNC_PASSWORD = os.path.join(CREDS, "vnc-password")
+RDP_PASSWORD = os.path.join(CREDS, "rdp-password")
 HIDDEN = "••••••••"
 
 
@@ -59,22 +62,23 @@ def write_conf(key, value):
         f.write("\n".join(lines) + "\n")
 
 
-def read_password():
+def read_password(path=VNC_PASSWORD):
     try:
-        with open(VNC_PASSWORD) as f:
+        with open(path) as f:
             return f.read().strip()
     except OSError:
         return ""
 
 
 def new_password():
-    """8 random letters and digits: VNC's own authentication takes at most 8 characters."""
+    """New random passwords: 8 letters and digits for VNC, whose own authentication takes at
+    most 8 characters, and 20 for RDP."""
     os.makedirs(CREDS, mode=0o700, exist_ok=True)
-    pw = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
-    fd = os.open(VNC_PASSWORD, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(pw + "\n")
-    return pw
+    for path, length in ((VNC_PASSWORD, 8), (RDP_PASSWORD, 20)):
+        pw = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(length))
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(pw + "\n")
 
 
 class Window(Adw.ApplicationWindow):
@@ -95,14 +99,21 @@ class Window(Adw.ApplicationWindow):
 
         access = Adw.PreferencesGroup(
             title="Remote access",
-            description="See and use the Frametop desktop from another computer on your tailnet, with any VNC "
-                        "viewer (RealVNC Viewer, TigerVNC, or macOS Screen Sharing). It shows the primary "
-                        "screen, the one with the taskbar, and follows it when you change the layout.")
+            description="See and use the Frametop desktop from another computer. RDP (krdc, Remmina, "
+                        "Windows Remote Desktop) shows every screen, with the cursor drawn by the viewer, "
+                        "on the LAN and the tailnet. VNC (RealVNC Viewer, TigerVNC, macOS Screen "
+                        "Sharing) shows the primary screen, the one with the taskbar, on the tailnet only.")
         page.add(access)
-        self.switch = Adw.SwitchRow(title="Remote access over VNC")
+        self.switch = Adw.SwitchRow(title="Remote access")
         self.switch.connect("notify::active", self.on_switch)
         access.add(self.switch)
-        self.address = Adw.ActionRow(title="Address", subtitle="…", subtitle_selectable=True)
+        self.rdp_address = Adw.ActionRow(title="RDP address", subtitle="…", subtitle_selectable=True)
+        copy = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Copy the address")
+        copy.add_css_class("flat")
+        copy.connect("clicked", lambda *_: self.copy(self.rdp_address_text(), "Address copied"))
+        self.rdp_address.add_suffix(copy)
+        access.add(self.rdp_address)
+        self.address = Adw.ActionRow(title="VNC address", subtitle="…", subtitle_selectable=True)
         copy = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Copy the address")
         copy.add_css_class("flat")
         copy.connect("clicked", lambda *_: self.copy(self.address_text(), "Address copied"))
@@ -110,23 +121,30 @@ class Window(Adw.ApplicationWindow):
         access.add(self.address)
 
         secret = Adw.PreferencesGroup(
-            title="Password",
-            description="VNC takes at most 8 characters. The connection itself is encrypted by the tailnet, and "
-                        "only devices on it can reach the Frame.")
+            title="Passwords",
+            description="RDP logs in as your user with its own encryption. VNC takes at most 8 characters "
+                        "and has none of its own, so it's on the tailnet only, which encrypts it.")
         page.add(secret)
-        self.password = Adw.ActionRow(title="VNC password", subtitle=HIDDEN, subtitle_selectable=True)
         self.eye = Gtk.ToggleButton(icon_name="view-reveal-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Show")
         self.eye.add_css_class("flat")
         self.eye.connect("toggled", self.on_reveal)
-        self.password.add_suffix(self.eye)
+        self.rdp_password = Adw.ActionRow(title="RDP password", subtitle=HIDDEN, subtitle_selectable=True)
+        self.rdp_password.add_suffix(self.eye)
+        copy_pw = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Copy the password")
+        copy_pw.add_css_class("flat")
+        copy_pw.connect("clicked", lambda *_: self.copy(read_password(RDP_PASSWORD), "Password copied")
+                        if read_password(RDP_PASSWORD) else self.toast("No password yet: turn remote access on"))
+        self.rdp_password.add_suffix(copy_pw)
+        secret.add(self.rdp_password)
+        self.password = Adw.ActionRow(title="VNC password", subtitle=HIDDEN, subtitle_selectable=True)
         copy_pw = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Copy the password")
         copy_pw.add_css_class("flat")
         copy_pw.connect("clicked", lambda *_: self.copy(read_password(), "Password copied")
                         if read_password() else self.toast("No password yet: turn remote access on"))
         self.password.add_suffix(copy_pw)
         secret.add(self.password)
-        change = Adw.ActionRow(title="New password",
-                               subtitle="Viewers connected now are disconnected and need the new one")
+        change = Adw.ActionRow(title="New passwords",
+                               subtitle="Both change. Viewers connected now are disconnected and need the new ones")
         change_button = Gtk.Button(label="Change…", valign=Gtk.Align.CENTER)
         change_button.connect("clicked", self.on_change)
         change.add_suffix(change_button)
@@ -134,10 +152,10 @@ class Window(Adw.ApplicationWindow):
 
         about = Adw.PreferencesGroup(
             title="How it works",
-            description="KDE's krdp captures the desktop on 127.0.0.1 only, and a VNC server on the tailnet "
-                        "address shows its primary screen. Turning it on in a desktop that started with it off "
-                        "takes a desktop restart (KWin allows the capture only from its start). Logs: "
-                        "/tmp/frametop-remote.log and /tmp/frametop-vnc.log.")
+            description="KDE's krdp captures the desktop and serves it over RDP on every address, and a VNC "
+                        "server on the tailnet address re-serves its primary screen. Turning it on in a desktop "
+                        "that started with it off takes a desktop restart (KWin allows the capture only from "
+                        "its start). Logs: /tmp/frametop-remote.log and /tmp/frametop-vnc.log.")
         page.add(about)
 
         # Each check runs remote-ctl.sh (bash, curl, and python3 for the tailnet name), so
@@ -172,7 +190,7 @@ class Window(Adw.ApplicationWindow):
         self.switch.set_active(wanted)
         self.setting = False
         if not self.status.get("address"):
-            state = "The tailnet (tailscale0) has no address: remote access can't start"
+            state = "The tailnet (tailscale0) has no address: remote access can't start (VNC needs it)"
         elif running:
             state = "On: waiting for viewers"
         elif wanted and self.status.get("capable") != "1":
@@ -183,11 +201,13 @@ class Window(Adw.ApplicationWindow):
             state = "Off"
         self.switch.set_subtitle(state)
         self.address.set_subtitle(self.address_text() or "no tailnet address")
-        pw = read_password()
-        if not pw:
-            self.password.set_subtitle("made when remote access first starts")
-        else:
-            self.password.set_subtitle(pw if self.revealed else HIDDEN)
+        self.rdp_address.set_subtitle(self.rdp_address_text() or "no address")
+        for row, path in ((self.password, VNC_PASSWORD), (self.rdp_password, RDP_PASSWORD)):
+            pw = read_password(path)
+            if not pw:
+                row.set_subtitle("made when remote access first starts")
+            else:
+                row.set_subtitle(pw if self.revealed else HIDDEN)
 
     def address_text(self):
         port = self.status.get("port", "5900")
@@ -195,6 +215,13 @@ class Window(Adw.ApplicationWindow):
         if name and addr:
             return f"{name}:{port}  ({addr})" if port != "5900" else f"{name}  ({addr})"
         return f"{addr}:{port}" if addr and port != "5900" else addr or ""
+
+    def rdp_address_text(self):
+        port = self.status.get("rdp_port", "3390")
+        host, lan, name, user = (self.status.get(k) for k in ("host", "lan", "name", "user"))
+        places = [f"{host}.local:{port}" if host else "", f"{lan}:{port}" if lan else "", f"{name}:{port}" if name else ""]
+        text = "  or  ".join(p for p in places if p)
+        return f"{text}   user {user}" if text and user else text
 
     # --- actions ---
     def on_switch(self, row, _param):

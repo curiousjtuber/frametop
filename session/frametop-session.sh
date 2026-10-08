@@ -176,8 +176,8 @@ export XDG_CONFIG_HOME=$HOME/.config/frametop
 export XDG_STATE_HOME=$HOME/.local/state/frametop
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"
 
-# Remote desktop over VNC: session/remote-desktop.sh captures the desktop with
-# krdp on 127.0.0.1, and session/vnc-bridge.sh re-serves its primary screen over VNC. krdpserver runs from the container, so KWin can't
+# Remote desktop: session/remote-desktop.sh captures the desktop with krdp and serves it
+# over RDP, and session/vnc-bridge.sh re-serves its primary screen over VNC. krdpserver runs from the container, so KWin can't
 # match it to an installed app. KWin's permission check for screencast and fake
 # input is turned off for this nested session only, and so is the check on KWin's
 # D-Bus screenshot interface, which scripts use to see the screens without the headset.

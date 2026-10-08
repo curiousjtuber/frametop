@@ -7,7 +7,7 @@ Frametop is a desktop for the Steam Frame that runs on the headset itself, with 
 - **Profiles.** Save where your screens are, which ones show, and which apps are open where. Switch to a profile from Display Settings, a key, or its launcher entry, or start the desktop in one.
 - **One mouse for all of SteamVR.** A Bluetooth mouse drives a small dot anchored in the room. It works the screens, the dashboard, Steam, and overlays, and hands the laser back when you pick up a controller.
 - **Look and click (experimental).** In gaze mode the pointer goes where you look. Meta+J and Meta+K, or the mouse buttons, click and fine-tune, and each correction teaches the tracker. Calibration runs in the headset.
-- **Made for long sessions.** The displays turn off when the headset isn't used, even on a stand that makes it seem worn. It stays awake on the charger, and you can reach the desktop remotely over VNC.
+- **Made for long sessions.** The displays turn off when the headset isn't used, even on a stand that makes it seem worn. It stays awake on the charger, and you can reach the desktop remotely over RDP or VNC.
 
 Two settings apps come with it: Frametop Display Settings for the screens, profiles, and power, and Frametop Input Settings for mice, keyboards, gaze, and button mappings. Optional fixes let Bluetooth LE mice and keyboards like the Swiftpoint Z3 reconnect after they sleep. Install it with one command: see [Install on the headset](#install-on-the-headset).
 
@@ -145,7 +145,7 @@ This is an early release, tested on one Steam Frame (SteamOS 0.3.0 build 2026092
 - Dragging something from one panel to another (a screen and a floating window) works, but the dragged item's icon doesn't show while the pointer is between panels.
 - Gaze mode is only as good as its calibration, and that depends on how the headset sits on your face. If the pointer lands off after you adjust the headset, run Quick check or Calibrate on the Gaze page of Frametop Input Settings.
 - On SteamVR's Settings page, the 3D mouse shows a laser beam and a larger hit dot, like a controller. SteamVR doesn't tell other programs where that page is (unlike Steam's pages, such as Library), so the mouse used to miss most of it: clicks went through to a desktop screen behind, and the dot disappeared. As a workaround, on that page only, the laser starts near your eye and SteamVR finds the page itself. See docs/design.md.
-- Remote desktop over VNC (Frametop Remote Access in the app menu, or `./desktops.sh remote on`) needs Tailscale on the Frame. It shows the primary screen only. The app turns it on and off, shows the address, and shows, copies, or changes the VNC password. The password is made at random on the Frame and kept in `~/.config/frametop-remote` (only you can read it); VNC limits it to 8 characters, and the tailnet encrypts the connection. Turning it on in a desktop that started with it off takes a desktop restart. It costs almost nothing until a viewer connects; the picture then takes a few seconds to appear.
+- Remote desktop (Frametop Remote Access in the app menu, or `./desktops.sh remote on`) serves every screen over RDP on the LAN and the tailnet, and the primary screen over VNC on the tailnet, which needs Tailscale on the Frame. The app turns it on and off, shows the address, and shows, copies, or changes the VNC password. The password is made at random on the Frame and kept in `~/.config/frametop-remote` (only you can read it); VNC limits it to 8 characters, and the tailnet encrypts the connection. Turning it on in a desktop that started with it off takes a desktop restart. It costs almost nothing until a viewer connects; the picture then takes a few seconds to appear.
 - The desktop has no blur behind panels and menus, and no window animations, so it leaves the headset's GPU to SteamVR. Turn them back on in the Frametop desktop's System Settings (Desktop Effects, and Animation speed under General Behavior); Frametop won't turn them off again.
 - Turning the displays off on a stand only turns their backlight off. SteamVR has no way for other programs to put the headset in standby, so tracking and rendering keep running, and the headset draws nearly its full power.
 
@@ -209,7 +209,7 @@ A Plasma session runs nested inside ft-screens (`screens/`), a small Wayland com
 | `gaze/` | Gaze mode (experimental): the gaze service, its calibration panel, our own eye tracker, and the gaze probe. See [gaze/README.md](gaze/README.md). |
 | `hands/` | Hand tracking (experimental, deferred: the installer doesn't offer it). See [hands/README.md](hands/README.md). |
 | `display-settings/`, `input-settings/` | The two settings apps (Kirigami, Python). |
-| `remote/` | Frametop Remote Access, the app that turns remote desktop over VNC on and off. |
+| `remote/` | Frametop Remote Access, the app that turns remote desktop over RDP and VNC on and off. |
 | `setup/` | The settings apps' Python environment, the dev container (Remote Access), and the Bluetooth fixes. See [setup/README.md](setup/README.md). |
 | `scripts/` | Helpers the installers use. They run commands locally on the Frame, or over SSH from a PC. |
 
