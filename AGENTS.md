@@ -17,7 +17,7 @@ scripts/frame.sh --host '<cmd>'          # runs on the SteamOS host
 
 - From a PC, edit only on the PC. The Frame's copy is a mirror that `sync.sh` overwrites.
 - Build inside the `dev` container. The SteamOS host has a read-only root and no compilers. Container builds link against the container's libraries, so they run in the container (`distrobox enter dev -- ...`); the SteamVR driver is built to run on the host.
-- Container packages the build needs go in the list in `setup/dev-container.sh`, so the container can be rebuilt.
+- Container packages the build needs go in the list in `setup/dev-container.sh`, so the container can be rebuilt. Fedora packages that need holding at a version, or a patch, go in `setup/container-pins.sh` (krdp and kpipewire are there now; `setup/README.md` says why), never into the container by hand.
 - Build output goes in `build/` next to the sources. It's gitignored and never synced.
 
 ## The headset may be in use

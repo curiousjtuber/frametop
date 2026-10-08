@@ -50,10 +50,14 @@ fi
 "$repo/scripts/container-up.sh" dev  # in a scope of its own, not this shell's
 "$distrobox" enter dev -- bash -c '
 set -euo pipefail
+repo=$1
+shift
 echo "installing ${#@} packages (already-installed ones are skipped)"
 sudo -n dnf install -y -q "$@" 2>&1 | { grep -vE "is already installed|^Nothing to do|^$" || true; }
 # OpenVR programs built here (the pointer helper and probe) look for the runtime at /opt/steamvr.
 [ -e /opt/steamvr ] || sudo -n ln -s /run/host/opt/steamvr /opt/steamvr
+# Two Fedora packages break Remote Access as they update; hold them (see the script).
+"$repo/setup/container-pins.sh"
 echo "dev container ready: $(. /etc/os-release; echo $PRETTY_NAME), glibc $(ldd --version | head -1 | grep -oE "[0-9.]+$")"
-' dev "$@"
+' dev "$repo" "$@"
 EOF
