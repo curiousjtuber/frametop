@@ -32,6 +32,7 @@ import time
 HOME = os.path.expanduser("~")
 UID = os.getuid()
 KNOWN_GOOD = os.path.join(HOME, ".local/state/frametop/known-good.json")
+DISABLED = os.path.join(HOME, ".local/state/frametop/disabled")  # enable.sh off's record
 STEAMVR_BIN = "/opt/steamvr/bin/linuxarm64"
 LAUNCHER = os.path.join(HOME, ".local/share/applications/frametop.desktop")
 VRPATHS = os.path.join(HOME, ".config/openvr/openvrpaths.vrpath")
@@ -229,6 +230,10 @@ def check_host():
     else:
         report("FAIL", "glibc", f"{glibc}, older than the {want} the pointer driver needs")
 
+    disabled = os.path.exists(DISABLED)
+    if disabled:
+        report("warn", "disabled", "Frametop is turned off (./enable.sh turns it on): its driver, launcher "
+               "entry, and services are off on purpose")
     try:
         with open(VRPATHS) as f:
             drivers = json.load(f).get("external_drivers") or []
@@ -237,7 +242,7 @@ def check_host():
     driver = next((d for d in drivers if os.path.basename(d.rstrip("/")) == "ft_pointer"), None)
     if driver and os.path.isfile(os.path.join(driver, "bin/linuxarm64/driver_ft_pointer.so")):
         report("ok", "pointer driver", f"registered with SteamVR ({driver})")
-    else:
+    elif not disabled:
         report("FAIL", "pointer driver", "not registered with SteamVR; run pointer/driver/install.sh install, "
                "then restart SteamVR")
     try:
@@ -251,8 +256,9 @@ def check_host():
 
     session = launcher_session()
     if session is None:
-        report("warn", "launcher", "Launch a program has no Frametop entry "
-               "(./desktops.sh install adds it)")
+        if not disabled:
+            report("warn", "launcher", "Launch a program has no Frametop entry "
+                   "(./desktops.sh install adds it)")
     elif os.path.isfile(session):
         report("ok", "launcher", f"Launch a program -> Frametop starts {session}")
     else:

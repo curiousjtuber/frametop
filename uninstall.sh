@@ -38,6 +38,7 @@ override=$apps/deckard-nested-desktop.desktop  # older installs replaced the sto
 relay_unit=$HOME/.config/systemd/user/frametop-input-relay.service
 driver=$HOME/.local/share/frametop/ft_pointer
 vrpathreg=/opt/steamvr/bin/linuxarm64/vrpathreg
+disabled=$HOME/.local/state/frametop/disabled  # enable.sh off's record of what it turned off
 handsctl=$HOME/.local/bin/ft-handsctl
 app=$HOME/.local/share/frametop/app  # install.sh's copy of the repo (its default --prefix)
 eyegrab_files=(/etc/systemd/system/frametop-eyegrab.service /etc/frametop/ft-eyegrab)
@@ -157,7 +158,7 @@ main() {
       run systemctl --user daemon-reload
     fi
     if [ -d "$driver" ]; then
-      if [ -x "$vrpathreg" ]; then
+      if [ -x "$vrpathreg" ] && grep -qs "\"$driver\"" "$HOME/.config/openvr/openvrpaths.vrpath"; then
         LD_LIBRARY_PATH=$(dirname "$vrpathreg") run "$vrpathreg" removedriver "$driver" ||
           echo "warning: SteamVR's vrpathreg couldn't unregister the driver; SteamVR may log that it's missing" >&2
       fi
@@ -175,6 +176,7 @@ main() {
         echo "warning: the system files weren't removed (no password?). Run this again to retry." >&2
       fi
     fi
+    [ -f "$disabled" ] && run rm -f "$disabled"
     [ "$dry" = 1 ] || echo "Frametop no longer starts."
   fi
 

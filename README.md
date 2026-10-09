@@ -186,6 +186,10 @@ To see what it would do without changing anything, add `-s -- --dry-run` after `
 
 Frametop runs from the installed copy, not from `~/frametop`, so deleting `~/frametop` by hand is harmless (unless you installed with `--prefix .`, which runs it from the checkout). The command above doesn't need the repo either.
 
+### Turn it off without uninstalling
+
+To keep Frametop installed but out of the way, in a terminal on the headset run `~/frametop/disable.sh` (or `~/.local/share/frametop/app/disable.sh`). Its services no longer start with SteamVR, the 3D mouse's driver is unregistered from SteamVR, and the Frametop entry and the profiles' entries leave Launch a program. The code, your settings, the settings apps' menu entries, and the system files stay. Nothing running stops until SteamVR restarts; add `--now` to stop the services right away (the keyboard and mouse that the input relay carries drop out of SteamVR until then). `enable.sh` puts back exactly what `disable.sh` turned off, and `enable.sh status` shows which state it's in. Either way, SteamVR has to restart to pick it up. Running `install.sh` again also turns everything on.
+
 Unless you ask for them to go, your settings stay: `~/.config/frametop.conf`, `frametop-input.json` (button maps and key combinations), `frametop-layout.json` (the layout and profiles), `frametop-float.json`, and `frametop-remote/` in `~/.config`, the gaze calibration in `~/.local/state/frametop`, and the desktop's own Plasma setup in `~/.config/frametop`. A later install picks them up again.
 
 ## How it works
@@ -197,6 +201,7 @@ A Plasma session runs nested inside ft-screens (`screens/`), a small Wayland com
 | `get.sh` | The one-line installer: picks stable or experimental, clones or updates the repo, and runs `install.sh`. |
 | `install.sh` | The one-step installer. Safe to re-run. |
 | `uninstall.sh` | The uninstaller: run it, restart the headset, and run it again. It doesn't need the rest of the repo. |
+| `disable.sh`, `enable.sh` | Turn Frametop off without uninstalling it (services, driver, launcher entries), and back on. |
 | `desktops.sh` | Start, stop, and configure the desktop, and install the input relay. |
 | `screens/` | ft-screens, the compositor (wlroots and OpenVR). |
 | `session/` | The desktop session script and its config example. |

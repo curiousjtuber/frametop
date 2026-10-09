@@ -188,6 +188,8 @@ else
 fi
 
 step "Done"
+# Installing turns everything on again, so enable.sh off's record no longer applies.
+on_frame 'rm -f ~/.local/state/frametop/disabled'
 cat <<'EOF'
 SteamVR has to restart once, to load the 3D mouse driver and to start the input relay
 before it. Restarting SteamVR closes everything open in VR, including this terminal if

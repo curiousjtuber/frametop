@@ -14,6 +14,8 @@ desktops.sh uninstall      # remove it
 desktops.sh start | stop | restart | status | log [lines]
 ```
 
+`disable.sh [--now]` turns all of Frametop off without uninstalling it: it disables the `frametop-*` user services, unregisters the 3D mouse's driver from SteamVR, and removes the Frametop and profile launcher entries, recording what it turned off in `~/.local/state/frametop/disabled`. `enable.sh` puts that back (and only that), `enable.sh status` shows which state it's in, and `install.sh` clears the record. Both take effect when SteamVR next starts; `--now` also stops the services. `scripts/update-check.py` reports a disabled install as off on purpose rather than broken.
+
 `session/frametop-session.sh` runs the desktop. It starts ft-screens (log: `/tmp/frametop-screens.log`), then KWin and Plasma inside it. Only one desktop runs at a time. `desktops.sh start` runs it in its own systemd unit, `frametop-desktop`. It keeps its Plasma config in `~/.config/frametop`, separate from the stock desktop's.
 
 When the VR launcher starts the desktop, it inherits the Steam client's environment. The session script drops the client's runtime from it (`LD_LIBRARY_PATH`, the `STEAM_*` settings, and the Steam overlay's Vulkan layer), so apps in the desktop use the system's libraries, including its video codecs, just as they would after a normal login.
