@@ -68,8 +68,17 @@ find_repo() {  # sets repo, and app when the code runs from a non-default instal
   [ -n "$dir" ] && { repo=$dir; return; }
   # The launcher entry and the relay's unit point into the code, until step 1 removes them:
   # the installed copy, or the repo itself (install.sh --prefix .).
-  p=$(sed -n 's#^Exec=\(.*\)/session/frametop-session\.sh.*#\1#p' "$entry" "$override" 2>/dev/null | head -1)
-  [ -z "$p" ] && p=$(sed -n 's#^ExecStart=/usr/bin/python3 \(.*\)/input/input-relay\.py.*#\1#p' "$relay_unit" 2>/dev/null | head -1)
+  # Only files that exist go to sed: a missing one fails the pipeline (pipefail), and set -e
+  # would end the script here without a word.
+  p=
+  for f in "$entry" "$override"; do
+    [ -f "$f" ] || continue
+    p=$(sed -n 's#^Exec=\(.*\)/session/frametop-session\.sh.*#\1#p' "$f" | head -1)
+    [ -n "$p" ] && break
+  done
+  if [ -z "$p" ] && [ -f "$relay_unit" ]; then
+    p=$(sed -n 's#^ExecStart=/usr/bin/python3 \(.*\)/input/input-relay\.py.*#\1#p' "$relay_unit" | head -1)
+  fi
   if [ -n "$p" ] && is_app "$p"; then app=$p; p=; fi
   [ -z "$p" ] && [ -f "${BASH_SOURCE[0]:-}" ] && p=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   if [ -n "$p" ] && is_app "$p"; then app=$p; p=; fi
