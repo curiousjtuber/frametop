@@ -32,8 +32,9 @@ keyboard_toggle = open or close Frametop's keyboard, float_toggle = float the de
 pointer (else the active one) in VR, or put it back if it floats, dock_all = put every floating
 window back (both to ft-floatd, @frametop_float), spin_next and spin_prev = turn every panel in the
 room about your head so the next one to the right or left comes to the front (ft-screens' "spin",
-Meta+Alt+Tab and Meta+Alt+Shift+Tab by default), profile:NAME = switch to that profile (ft-layout
-use NAME: its screens and apps; docs/profiles.md), steam_menu = open the SteamVR dashboard on
+Meta+Alt+Tab and Meta+Alt+Shift+Tab by default), screen_face = turn the screen the pointer is on,
+or else the one you're looking at, to face you (ft-screens' "face look"), profile:NAME = switch to
+that profile (ft-layout use NAME: its screens and apps; docs/profiles.md), steam_menu = open the SteamVR dashboard on
 Steam's menu, or close the dashboard (steam/ft-steam menu, through Steam's UI), pause_toggle =
 pause Frametop for a VR game, or resume it (game_pause.py), command:CMD = run
 CMD with sh -c (on the host, as this service: its environment, output to its log, and
@@ -218,7 +219,7 @@ RULES_PATH = os.path.expanduser("~/.config/frametop-input.json")
 ACTIONS = ("left", "right", "middle", "back", "scroll_up", "scroll_down", "dashboard", "recenter",
            "pointer_toggle", "follow_toggle", "gaze_toggle", "gaze_precision", "gaze_drag", "gaze_left", "gaze_right",
            "gaze_quickcal", "sens_up", "sens_down", "layout_reset", "screens_toggle", "keyboard_toggle", "float_toggle",
-           "dock_all", "spin_next", "spin_prev", "steam_menu", "pause_toggle", "key", "none")
+           "dock_all", "spin_next", "spin_prev", "screen_face", "steam_menu", "pause_toggle", "key", "none")
 # Gaze mode is a mouse feature: these never come from a controller button (docs/gaze-controllers.md).
 GAZE_ACTIONS = ("gaze_toggle", "gaze_precision", "gaze_drag", "gaze_left", "gaze_right", "gaze_quickcal")
 # Key combinations a rules file without "key_bindings" gets: a Meta tap opens Steam's menu, Meta+J
@@ -244,8 +245,9 @@ FLOAT = "\0frametop_float"  # ft-floatd, floating windows in the Frametop deskto
 # Actions for ft-floatd ("float_toggle", "dock_all"): they don't need pointer mode.
 FLOAT_ACTIONS = {"float_toggle": b"float pointer", "dock_all": b"dock all"}
 # Actions for ft-screens: spin_next and spin_prev turn every panel in the room about your head,
-# so the next one to the right or left comes to the front. They don't need pointer mode either.
-SCREENS_ACTIONS = {"spin_next": b"spin next", "spin_prev": b"spin prev"}
+# so the next one to the right or left comes to the front, and screen_face turns one screen to
+# face you. They don't need pointer mode either.
+SCREENS_ACTIONS = {"spin_next": b"spin next", "spin_prev": b"spin prev", "screen_face": b"face look"}
 PROFILE = "profile:"  # "profile:NAME": switch to that profile (doesn't need pointer mode either)
 COMMAND = "command:"  # "command:CMD": run CMD (nor does this)
 

@@ -13,6 +13,8 @@
 //     follows the screen's resolution).
 //   - a reset button left of the bar: the profile in use opened again, or every screen back
 //     in its layout, around where you are now (`ft-layout reset`, like Meta+Shift+R).
+//   - a face button left of that (a floating window's: left of its close button): the
+//     panel turns where it is to face your head, level (FaceHead; "face <screen>|look").
 //   The controls are translucent, like SteamVR's own, and brighten under a laser. They
 //   are invisible until a laser (a controller's, or the 3D mouse's) lands on or passes very close to
 //   one of them (UpdateControls).
@@ -259,7 +261,8 @@ struct Screen {
                           handle = vr::k_ulOverlayHandleInvalid, curveButton = vr::k_ulOverlayHandleInvalid,
                           rollButton = vr::k_ulOverlayHandleInvalid, dockButton = vr::k_ulOverlayHandleInvalid,
                           closeButton = vr::k_ulOverlayHandleInvalid,  // the last two: floating windows
-                          resetButton = vr::k_ulOverlayHandleInvalid;  // desktop screens only
+                          resetButton = vr::k_ulOverlayHandleInvalid,  // desktop screens and remote displays
+                          faceButton = vr::k_ulOverlayHandleInvalid;
     int width = 0, height = 0;    // current buffer size (mouse scale)
     double metres = 1;
     double curve = 0;             // cylinder radius in metres; 0 = flat
@@ -276,7 +279,7 @@ struct Screen {
     double grabX = 0, grabY = 0;              // resize: the grab point relative to the corner
     Mat rollFrom = Identity();                // roll: the pose at the press (pinRel when pinned)
     double rollAngle = 0;                     // roll: the laser's angle around the centre then
-    bool hover[7] = {};                       // a laser is on the bar, curve, roll, resize, dock, close, reset control
+    bool hover[8] = {};                       // a laser is on the bar, curve, roll, resize, dock, close, reset, face control
     bool lasers = true;                       // MakeOverlaysInteractiveIfVisible is set
     float controls = 0;                       // the controls' fade, 0 (hidden) .. 1
     bool controlsUp = false;                  // the controls' overlays are shown
@@ -321,11 +324,11 @@ struct Screen {
     // Buffer pixels from OpenVR's mouse position on the panel (its origin is bottom left).
     // A cropped panel too: SteamVR gives the position in the whole texture, not the crop.
     void ToBuffer(double mx, double my, double *x, double *y) const { *x = mx, *y = height - my; }
-    std::array<vr::VROverlayHandle_t, 7> Controls() const {
-        return {bar, curveButton, rollButton, handle, dockButton, closeButton, resetButton};
+    std::array<vr::VROverlayHandle_t, 8> Controls() const {
+        return {bar, curveButton, rollButton, handle, dockButton, closeButton, resetButton, faceButton};
     }
-    std::array<vr::VROverlayHandle_t, 8> All() const {
-        return {overlay, bar, curveButton, rollButton, handle, dockButton, closeButton, resetButton};
+    std::array<vr::VROverlayHandle_t, 9> All() const {
+        return {overlay, bar, curveButton, rollButton, handle, dockButton, closeButton, resetButton, faceButton};
     }
 };
 std::map<int, Screen> g_screens;
@@ -500,6 +503,19 @@ std::vector<uint8_t> ResetTexture(int n) {
         DiscRim);
 }
 
+std::vector<uint8_t> FaceTexture(int n) {
+    // An eye: "turn this screen to face me".
+    return ControlTexture(
+        n, InDisc,
+        [](double u, double v) {
+            if (std::hypot(u, v) < 0.15) return true;  // the pupil
+            if (std::fabs(u) >= 0.6) return false;
+            const double h = 0.34 * (1 - u * u / 0.36);  // the lids' half-height there
+            return std::fabs(v) <= h && std::fabs(v) >= h - 0.11;
+        },
+        DiscRim);
+}
+
 vr::VROverlayHandle_t MakeChrome(const char *key, const char *name, const std::vector<uint8_t> &px, int w, int h) {
     vr::VROverlayHandle_t o = vr::k_ulOverlayHandleInvalid;
     if (const auto err = vr::VROverlay()->CreateOverlay(key, name, &o); err != vr::VROverlayError_None) {
@@ -661,9 +677,10 @@ Mat BarOffset(const Screen &s) { return OnSurface(s, 0, BarY(s), 0.003); }
 // Put the bar, the curve button, and the corner tab under the screen (same parent: the
 // room or the controller), sized for the screen and its distance, and on its surface.
 // Where each control sits, relative to the screen: bar, curve, roll, resize tab, a
-// floating window's dock and close buttons (left of the bar), and a desktop screen's reset
-// button (left of the bar, where a floating window has its dock button).
-std::array<Mat, 7> ControlOffsets(const Screen &s) {
+// floating window's dock and close buttons (left of the bar), a desktop screen's reset
+// button (left of the bar, where a floating window has its dock button), and the face
+// button, left of the close or reset button.
+std::array<Mat, 8> ControlOffsets(const Screen &s) {
     const double h = s.heightMetres(), bar = s.chrome, button = s.grip, gap = bar * 0.06;
     return {BarOffset(s), OnSurface(s, bar / 2 + gap + button / 2, BarY(s), 0.003),
             OnSurface(s, bar / 2 + gap * 2 + button * 1.5, BarY(s), 0.003),
@@ -671,7 +688,9 @@ std::array<Mat, 7> ControlOffsets(const Screen &s) {
             OnSurface(s, s.metres / 2 + s.grip / 2, -(h / 2 + s.grip / 2), 0.003),
             OnSurface(s, -(bar / 2 + gap + button / 2), BarY(s), 0.003),
             OnSurface(s, -(bar / 2 + gap * 2 + button * 1.5), BarY(s), 0.003),
-            OnSurface(s, -(bar / 2 + gap + button / 2), BarY(s), 0.003)};
+            OnSurface(s, -(bar / 2 + gap + button / 2), BarY(s), 0.003),
+            s.floating ? OnSurface(s, -(bar / 2 + gap * 3 + button * 2.5), BarY(s), 0.003)
+                       : OnSurface(s, -(bar / 2 + gap * 2 + button * 1.5), BarY(s), 0.003)};
 }
 
 // A floating window's popups and dialogs, a few millimetres in front of it, where they are
@@ -709,12 +728,13 @@ void PlaceChrome(Screen &s) {
     } else {
         vr::VROverlay()->SetOverlayWidthInMeters(s.resetButton, float(button));
     }
+    vr::VROverlay()->SetOverlayWidthInMeters(s.faceButton, float(button));
     // Curved, the bar bends with the screen's bottom edge.
     vr::VROverlay()->SetOverlayCurvature(s.bar, s.curve > 0 ? float(std::min(1.0, bar / (2 * M_PI * s.curve))) : 0.f);
     const std::pair<vr::VROverlayHandle_t, Mat> parts[] = {
         {s.bar, offsets[0]},        {s.curveButton, offsets[1]}, {s.rollButton, offsets[2]},
         {s.handle, offsets[3]},     {s.dockButton, offsets[4]},  {s.closeButton, offsets[5]},
-        {s.resetButton, offsets[6]}};
+        {s.resetButton, offsets[6]}, {s.faceButton, offsets[7]}};
     PlaceSubs(s);
     if (s.pinned != kNone) {
         for (const auto &[o, off] : parts) {
@@ -836,10 +856,10 @@ bool ModeVisible() {
 void ApplyAlpha(const Screen &s) {
     vr::VROverlay()->SetOverlayAlpha(s.overlay, s.alpha);
     for (const auto &[k, sub] : s.subs) vr::VROverlay()->SetOverlayAlpha(sub.overlay, s.alpha);
-    const bool active[7] = {s.hover[0] || s.drag == Drag::Move, s.hover[1], s.hover[2] || s.drag == Drag::Roll,
-                            s.hover[3] || s.drag == Drag::Resize, s.hover[4], s.hover[5], s.hover[6]};
+    const bool active[8] = {s.hover[0] || s.drag == Drag::Move, s.hover[1], s.hover[2] || s.drag == Drag::Roll,
+                            s.hover[3] || s.drag == Drag::Resize, s.hover[4], s.hover[5], s.hover[6], s.hover[7]};
     const auto controls = s.Controls();
-    for (int k = 0; k < 7; ++k)
+    for (int k = 0; k < 8; ++k)
         if (controls[k] != vr::k_ulOverlayHandleInvalid)
             vr::VROverlay()->SetOverlayAlpha(controls[k], s.alpha * s.controls * (active[k] ? 1.f : kChromeIdle));
 }
@@ -995,7 +1015,7 @@ void UpdateControls() {
             for (double f : {-0.5, -0.25, 0.0, 0.25, 0.5})
                 spots.push_back(Mul(p, Mul(offsets[0], Translation(f * s.chrome, 0, 0))));
             const auto controls = s.Controls();
-            for (int k = 1; k < 7; ++k)
+            for (int k = 1; k < 8; ++k)
                 if (controls[k] != vr::k_ulOverlayHandleInvalid) spots.push_back(Mul(p, offsets[k]));
             const double reach = std::max(s.grip * 1.5, s.chrome * 0.12);
             for (const Mat &d : lasers) {
@@ -1381,7 +1401,7 @@ void ApplyCrop(Screen &s) {
 // top left corner stays where it is when the window changes size.
 // A floating window's panel and its controls exist only while a window floats on it: SteamVR
 // allows k_unMaxOverlayCount (128) overlays in all, SteamVR's own included, and each panel
-// with its controls takes seven, so eight idle slots held 56 (2026-10-07: with three screens,
+// with its controls took seven, so eight idle slots held 56 (2026-10-07: with three screens,
 // a third remote screen didn't fit). Everything the overlays show is kept in the Screen, so
 // a new panel picks up where the old one was.
 bool MakePanel(Screen &s, const char *prefix, const char *label);
@@ -1406,7 +1426,7 @@ void DropFloatPanel(Screen &s) {
     for (auto o : s.All())
         if (o != vr::k_ulOverlayHandleInvalid) vr::VROverlay()->DestroyOverlay(o);
     s.overlay = s.bar = s.handle = s.curveButton = s.rollButton = s.dockButton = s.closeButton = s.resetButton =
-        vr::k_ulOverlayHandleInvalid;
+        s.faceButton = vr::k_ulOverlayHandleInvalid;
     s.visible = s.controlsUp = s.barLit = false;
     s.controls = 0;
     std::fill(std::begin(s.hover), std::end(s.hover), false);
@@ -1753,6 +1773,45 @@ void SpinCommand(const char *arg, char *reply, int size) {
     g_spin.on = true;
     SendPointer("recenter");  // the 3D mouse's pointer stays in front of you, on what comes there
     std::snprintf(reply, size, "ok %.1f", turn);
+}
+
+// ---------------------------------------------------------------- facing you
+// "face <screen>|look", and a screen's face button: the screen turns about its centre to
+// face your head, level (FacingPose: it tilts too, and any roll goes). A pinned one stays
+// pinned, turned on its controller or the headset as it faces you now. "look" turns the
+// screen the pointer or a laser was just on, or else the one nearest your line of sight.
+bool FaceHead(Screen &s) {
+    Mat head, p;
+    if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, &head) || !ScreenPose(s, &p)) return false;
+    const double pt[3] = {p.m[0][3], p.m[1][3], p.m[2][3]};
+    const Mat q = FacingPose(pt, head);
+    const int index = ScreenIndexOf(s);
+    EndDrag(s);
+    g_spin.base.erase(index);
+    Mat c;
+    if (s.pinned == kNone) SetAbsolute(s, q);
+    else if (DevicePose(s.pinned, &c)) Pin(s, s.pinned, Mul(Inverse(c), q));
+    else return false;
+    std::printf("screen %d: turned to face you\n", index + 1);
+    return true;
+}
+
+Screen *LookedAt() {
+    Mat head, p;
+    const bool haveHead = DevicePose(vr::k_unTrackedDeviceIndex_Hmd, &head);
+    const int64_t now = NowMs();
+    Screen *best = nullptr;
+    int64_t latest = now - kInputFocus;
+    for (auto &[i, s] : g_screens)
+        if (s.visible && s.inputMs > latest) best = &s, latest = s.inputMs;
+    if (best || !haveHead) return best;
+    double nearest = kViewAngle;
+    for (auto &[i, s] : g_screens) {
+        if (!s.visible || !ScreenPose(s, &p)) continue;
+        const double a = AngleToScreen(s, p, head);
+        if (a < nearest) best = &s, nearest = a;
+    }
+    return best;
 }
 
 uint32_t LinuxButton(uint32_t vrButton) {
@@ -2167,6 +2226,8 @@ bool MakePanel(Screen &s, const char *prefix, const char *label) {
         static const auto reset = ResetTexture(64);
         s.resetButton = chrome("reset", "reset the layout", reset, 64, 64);
     }
+    static const auto face = FaceTexture(64);
+    s.faceButton = chrome("face", "turn to face you", face, 64, 64);
     ApplyAlpha(s);
     return true;
 }
@@ -2195,7 +2256,7 @@ void ft_vr_screen_create(int index, double metres, int count) {
 
 // A remote screen's panel (remote.c): like a screen's, with its own overlay keys. False if
 // SteamVR made no panel (it allows k_unMaxOverlayCount overlays in all, and each panel with
-// its controls takes six).
+// its controls takes seven).
 // A remote screen's place while its stream is stopped (Remote Displays' Disconnect): its next
 // start puts it back there. Only for this run: the room's coordinates may not be the same in
 // the next one, and ft-layout places it then.
@@ -2476,6 +2537,17 @@ void ft_vr_poll(void (*handle)(const struct ft_event *, void *), void *data) {
                 ReleaseAwayBy(ev.trackedDeviceIndex, ev.data.mouse.button, handle, data);
             }
         }
+        // The face button: turn the screen where it is to face your head.
+        while (s.faceButton != vr::k_ulOverlayHandleInvalid &&
+               vr::VROverlay()->PollNextOverlayEvent(s.faceButton, &ev, sizeof ev)) {
+            hover(7);
+            if (ev.eventType == vr::VREvent_MouseButtonDown && ev.data.mouse.button == vr::VRMouseButton_Left) {
+                FaceHead(s);
+            } else if (ev.eventType == vr::VREvent_MouseButtonUp) {
+                EndDragsBy(ev.trackedDeviceIndex);
+                ReleaseAwayBy(ev.trackedDeviceIndex, ev.data.mouse.button, handle, data);
+            }
+        }
         // The roll button: drag around like a knob, or scroll.
         while (vr::VROverlay()->PollNextOverlayEvent(s.rollButton, &ev, sizeof ev)) {
             hover(2);
@@ -2624,6 +2696,8 @@ void ft_vr_keyboard_hide(void) {
 //                     <controllers> <game running 0|1> <ingames>"
 //   spin next|prev|<degrees>  turn every panel in the room about your head (see the lazy
 //                             susan) -> "ok <degrees turned>"
+//   face <screen>|look        turn that screen, or the one you're on or looking at, to face
+//                             your head (see facing you) -> "ok <screen>"
 //   cutouts on|off|state      hand cutouts (see handcut.h) -> "ok <on|off> <ready|idle|unavailable>
 //                             <last composite ms> ms, predict <on|off> lead <ms> ms"
 //   cutouts predict on|off    move the hands ahead along their velocity (on by default)
@@ -2870,6 +2944,13 @@ void ft_vr_command(const char *cmd, char *reply, int size) {
         std::snprintf(reply, size, "ok");
     } else if (std::sscanf(cmd, "spin %15s", word) == 1) {
         SpinCommand(word, reply, size);
+    } else if (std::sscanf(cmd, "face %15s", word) == 1) {
+        const bool look = !std::strcmp(word, "look");
+        Screen *s = look ? LookedAt() : Find(std::atoi(word));
+        if (!s && look) return (void)std::snprintf(reply, size, "error no screen you're on or looking at");
+        if (!s) return (void)std::snprintf(reply, size, "error no screen %s", word);
+        if (!FaceHead(*s)) return (void)std::snprintf(reply, size, "error no head pose (headset off?)");
+        std::snprintf(reply, size, "ok %d", ScreenIndexOf(*s) + 1);
     } else if (std::strcmp(cmd, "debug") == 0) {
         // One line for scripts/report.sh: what decides whether a laser drags and the keyboard shows.
         std::string drags;

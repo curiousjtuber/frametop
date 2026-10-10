@@ -412,6 +412,11 @@ def tests():
     pause("off")
     check("spinning works without pointer mode", (relay.needs_pointer("spin_next"), relay.needs_pointer("spin_prev")),
           (False, False))
+    use({"125+33": "screen_face"})  # Meta+F
+    key(META, 1); key(F, 1); key(F, 0); key(META, 0)
+    check("screen_face asks ft-screens to turn the screen you're on", [m for m in typed() if m.startswith("face")],
+          ["face look"])
+    check("screen_face works without pointer mode", relay.needs_pointer("screen_face"), False)
 
     check("an empty command isn't an action", relay.known_action("command:  "), False)
     check("steam_menu, pause_toggle and commands work without pointer mode",

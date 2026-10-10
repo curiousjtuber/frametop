@@ -79,6 +79,7 @@ ACTION_LABELS = {
     "pause_toggle": "Pause/resume Frametop (for VR games)",
     "spin_next": "Spin the panels: next one on the right to the front",
     "spin_prev": "Spin the panels: next one on the left to the front",
+    "screen_face": "Turn the screen you're on to face you",
     "key": "Pass through as key",
     "none": "Do nothing",
 }

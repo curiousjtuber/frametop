@@ -53,11 +53,12 @@ If you work in the desktop for long stretches, or leave the headset on a stand, 
 
 | Do this | To get this |
 | --- | --- |
-| Point near the bottom of a screen | Its controls fade in: the bar, the curve and roll buttons, and the resize tab on the corner |
+| Point near the bottom of a screen | Its controls fade in: the bar, the curve and roll buttons, the reset and face buttons, and the resize tab on the corner |
 | Drag the bar under a screen | Moves the screen; scroll while dragging to push it away or pull it closer. With the mouse, hold right while dragging to tilt it |
 | Drag the tab on a screen's bottom right corner | Resizes the screen |
 | Click the curve button (next to the bar) | Curves the screen around you, or flattens it |
 | Drag the roll button sideways, or scroll on it | Rolls the screen; it snaps level near straight |
+| Click the face button (the eye, left of the bar) | Turns the screen where it is to face you, and levels it. Floating windows have one too. Also mappable to a mouse button, controller button, or key combination as Turn the screen you're on to face you |
 | While carrying a screen, sweep its laser across your other controller's ring, then let go | Pins it to that wrist, at its size and distance, as you hold it when you let go; it shows while you see its front. Grab its bar to adjust it (it stays pinned); sweep across the ring again to take it off |
 | Set a screen to On your head (Frametop Display Settings, Visibility & pins) | Pins it to your head where it is, like a HUD. Grab its bar to move it; it stays on your head |
 | Meta+Shift+R in the desktop | Puts the screens back in their layout (also in the menu as Reset Screen Layout, and mappable to a mouse button) |
