@@ -128,7 +128,13 @@ runtime=$host_runtime/frametop
 cleanup() {
   [ -n "${watch_pid:-}" ] && kill "$watch_pid" 2>/dev/null || true  # the logout watcher below
   "$here/remote-ctl.sh" stop
-  fusermount3 -u -z "$runtime/doc" 2>/dev/null || true
+  # Every FUSE mount below, not just our document portal: SteamOS's own desktop started from
+  # this one (Native Desktop in its menu) makes its runtime dir, portal and all, inside ours,
+  # and outlives it. rm can't remove a mount point, and under set -e that ended every later
+  # start before Plasma. umount --recursive needs $runtime itself to be a mount point.
+  findmnt -rn -o TARGET | grep "^$runtime/" | sort -r | while read -r m; do
+    fusermount3 -u -z "$m" 2>/dev/null || true
+  done
   umount --recursive "$runtime" 2>/dev/null || true
   rm -rf "$runtime"
 }
