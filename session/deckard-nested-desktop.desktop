@@ -4,6 +4,9 @@ Name=Desktop
 Comment=Plasma desktop across several VR screens (Frametop)
 Exec=@SESSION@
 Categories=Utility;
+# Not in Plasma's own menus: in Frametop it only finds itself already running. Steam's launcher
+# runs with XDG_CURRENT_DESKTOP=gamescope, so it still lists it.
+NotShowIn=KDE;
 
 # Installed by desktops.sh install into ~/.local/share/applications,
 # where it overrides /usr/share/applications/deckard-nested-desktop.desktop.
