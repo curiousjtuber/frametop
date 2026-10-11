@@ -125,9 +125,38 @@ unset XDG_DESKTOP_PORTAL_DIR
 host_runtime=$XDG_RUNTIME_DIR
 runtime=$host_runtime/frametop
 
+# What the session left running. Plasma can't reach systemd from the session's own bus, so it
+# starts its autostart programs as plain detached processes, and those without a window
+# (baloo_file, geoclue's agent) outlive KWin and the bus, one more each session. So stop
+# every process in this desktop's cgroup with our runtime dir, or one inside it (as
+# steamos-nested-desktop makes), in its environment. The container is in a scope of its own
+# (scripts/container-up.sh). Steam and SteamVR are skipped by name, in case one was
+# started from in here.
+reap() {
+  local cg p pids=()
+  cg=$(< "/proc/$$/cgroup")
+  for p in $(pgrep -u "$(id -u)" .); do
+    [ "$p" != $$ ] && [ "$p" != "$BASHPID" ] || continue
+    [ "$(cat "/proc/$p/cgroup" 2>/dev/null)" = "$cg" ] || continue
+    case $(tr '\0' '\n' 2>/dev/null < "/proc/$p/environ" | sed -n 's/^XDG_RUNTIME_DIR=//p') in
+      "$runtime" | "$runtime"/*) ;;
+      *) continue ;;
+    esac
+    case $(cat "/proc/$p/comm" 2>/dev/null) in steam* | vr* | gamescope*) continue ;; esac
+    pids+=("$p")
+  done
+  [ ${#pids[@]} -gt 0 ] || return 0
+  echo "frametop: stopping what the session left running:" \
+    "$(ps -o comm= -p "$(IFS=,; echo "${pids[*]}")" | tr '\n' ' ')" >&2
+  kill "${pids[@]}" 2>/dev/null || true
+  for _ in $(seq 10); do kill -0 "${pids[@]}" 2>/dev/null || return 0; sleep 0.3; done
+  kill -KILL "${pids[@]}" 2>/dev/null || true
+}
+
 cleanup() {
   [ -n "${watch_pid:-}" ] && kill "$watch_pid" 2>/dev/null || true  # the logout watcher below
   "$here/remote-ctl.sh" stop
+  reap
   # Every FUSE mount below, not just our document portal: SteamOS's own desktop started from
   # this one (Native Desktop in its menu) makes its runtime dir, portal and all, inside ours,
   # and outlives it. rm can't remove a mount point, and under set -e that ended every later
