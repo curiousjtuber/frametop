@@ -40,11 +40,16 @@ $running && echo 'started' || { echo 'failed:'; tail -20 $log; exit 1; }" ;;
   install)
     # Also "Native Desktop", a copy of SteamOS's entry for its own desktop. Optional, so a SteamOS
     # without the stock entry still installs. No X-Steam-Special, so Steam can only single out ours.
+    # Both entries have NotShowIn=KDE, which keeps them out of Plasma's menus and search,
+    # Frametop's and Desktop Mode's: run from Frametop, Native Desktop nested SteamOS's desktop
+    # inside ours and outlived it, and Desktop did nothing. Steam's launcher runs with
+    # XDG_CURRENT_DESKTOP=gamescope, so it still lists them.
     "$root/scripts/sync.sh" >/dev/null
     "$frame" --host "set -e; mkdir -p ~/.local/share/applications
 sed 's|@SESSION@|$session/frametop-session.sh|' $session/deckard-nested-desktop.desktop > ~/$override
 if [ -r $stock ]; then
   sed -e 's/^Name=.*/Name=Native Desktop/' -e '/^Name\\[/d' -e '/^X-Steam-Special=/d' -e '/pick this out/d' \\
+    -e '/^\\[Desktop Entry\\]\$/a NotShowIn=KDE;' \\
     $stock > ~/$native_copy.new && mv ~/$native_copy.new ~/$native_copy
 else
   rm -f ~/$native_copy; echo 'no $stock: no Native Desktop entry' >&2

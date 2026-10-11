@@ -284,7 +284,7 @@ def launcher_keys(path):
     """A launcher entry's keys, less the ones desktops.sh changes in its Native Desktop copy."""
     with open(path) as f:
         pairs = [line.rstrip("\n").split("=", 1) for line in f if "=" in line and not line.startswith("#")]
-    return {k: v for k, v in pairs if k != "X-Steam-Special" and k.split("[")[0] != "Name"}
+    return {k: v for k, v in pairs if k not in ("X-Steam-Special", "NotShowIn") and k.split("[")[0] != "Name"}
 
 
 def launcher_session():
