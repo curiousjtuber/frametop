@@ -18,12 +18,13 @@ runtime=/run/user/$(id -u)/frametop
 vnc_port=${VNC_PORT:-5900}
 rdp_port=${RDP_PORT:-3390}
 
-running() { pgrep -f '[X]vnc :20 ' >/dev/null && pgrep -f '[k]rdpserver --plasma' >/dev/null; }
+# krdpserver by its port: another krdpserver (steam-frame-utils' krdpd, port 3391) isn't ours.
+running() { pgrep -f '[X]vnc :20 ' >/dev/null && pgrep -f "[k]rdpserver --plasma .*--port $rdp_port " >/dev/null; }
 
 stop() {
   pkill -f "[v]nc-bridge.sh" 2>/dev/null
   pkill -f "[r]emote-desktop.sh" 2>/dev/null
-  pkill -f '[k]rdpserver --plasma' 2>/dev/null
+  pkill -f "[k]rdpserver --plasma .*--port $rdp_port " 2>/dev/null
   pkill -f '[X]vnc :20 ' 2>/dev/null
   pkill -f '[x]freerdp /v:' 2>/dev/null
   return 0
