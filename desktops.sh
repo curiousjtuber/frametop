@@ -76,7 +76,7 @@ ip=\$(ip -4 -o addr show tailscale0 | awk '{print \$4}' | cut -d/ -f1)
 echo \"VNC: \$(hostname):5900 on the tailnet (\$ip), the primary screen  password \$(cat ~/.config/frametop-remote/vnc-password 2>/dev/null || echo '(created on first start)')\"
 echo \"RDP: \$(hostname).local:3390 on the LAN and the tailnet (\$ip), every screen  user \$(id -un)  password \$(cat ~/.config/frametop-remote/rdp-password 2>/dev/null || echo '(created on first start)')\"
 if pgrep -f '[X]vnc :20 ' >/dev/null; then echo 'vnc: running'; else echo 'vnc: not running'; fi
-if pgrep -f '[k]rdpserver --plasma' >/dev/null; then echo 'rdp (krdp): running'; else echo 'rdp (krdp): not running'; fi" ;;
+if pgrep -f '[k]rdpserver --plasma .*--port 3390 ' >/dev/null; then echo 'rdp (krdp): running'; else echo 'rdp (krdp): not running'; fi" ;;
       *) echo "usage: $0 remote on|off|info" >&2; exit 2 ;;
     esac ;;
   relay)
@@ -107,7 +107,7 @@ systemctl --user stop frametop-desktop 2>/dev/null; pkill -x ft-screens; pkill -
 for i in \$(seq 20); do $running || { echo stopped; exit 0; }; sleep 0.5; done
 pkill -KILL -x ft-screens
 pkill -KILL -f '$match'; sleep 1
-pkill -f '[m]ultidesk-session.sh --inner' 2>/dev/null; pkill -f '[k]rdpserver --plasma' 2>/dev/null
+pkill -f '[m]ultidesk-session.sh --inner' 2>/dev/null; pkill -f '[k]rdpserver --plasma .*--port 3390 ' 2>/dev/null
 pkill -f '[X]vnc :20 ' 2>/dev/null; pkill -f '[x]freerdp /v:.*:3390' 2>/dev/null
 $running && { echo 'still running'; exit 1; } || echo 'stopped (forced)'" ;;
   restart) "$0" stop; sleep 3; exec "$0" start ${screens:+"$screens"} ;;
