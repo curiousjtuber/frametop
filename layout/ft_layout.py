@@ -104,6 +104,7 @@ Usage (on the Frame host; Frametop Display Settings calls it too):
 """
 import concurrent.futures
 import fcntl
+import errno
 import json
 import math
 import os
@@ -193,7 +194,16 @@ def save_layout(layout):
     tmp = LAYOUT_PATH + ".tmp"
     with open(tmp, "w") as f:
         json.dump(layout, f, indent=2)
-    os.replace(tmp, LAYOUT_PATH)
+    try:
+        os.replace(tmp, LAYOUT_PATH)
+    except OSError as e:
+        # In Frametop's Flatpak (the settings apps) the file is a bind mount of its own, which
+        # a rename can't replace: written in place there, whole, from the file just made.
+        if e.errno != errno.EBUSY:
+            raise
+        with open(tmp) as src, open(LAYOUT_PATH, "w") as dst:
+            dst.write(src.read())
+        os.unlink(tmp)
 
 
 def screen_entry(layout, i):

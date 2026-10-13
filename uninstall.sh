@@ -262,9 +262,18 @@ main() {
   fi
   [ "$dry" = 1 ] || rmdir "$HOME/.local/share/frametop" 2>/dev/null || true
 
+  if command -v flatpak >/dev/null && XDG_RUNTIME_DIR=/run/user/$(id -u) flatpak info --user io.github.frametop.Frametop >/dev/null 2>&1; then
+    echo "Frametop's Python runtime (the Flatpak io.github.frametop.Frametop, about 250 MB) ran the"
+    echo "settings apps and the eye tracker. KDE's runtime stays, for any other app on it."
+    if ask "Delete Frametop's Python runtime?" y; then
+      run env XDG_RUNTIME_DIR=/run/user/$(id -u) flatpak uninstall --user -y --noninteractive io.github.frametop.Frametop >/dev/null
+      run rm -f "$HOME/.local/share/frametop/python-runtime.inputs"
+    fi
+  fi
   if command -v podman >/dev/null && podman container exists dev 2>/dev/null; then
-    echo "The build container (dev) holds Frametop's compilers and libraries, 1-2 GB. If you put"
-    echo "anything else in it, that goes too."
+    echo "The dev container holds Remote Access's krdp, FreeRDP and TigerVNC (and, from older"
+    echo "installs, Frametop's compilers and libraries), 1-2 GB. If you put anything else in"
+    echo "it, that goes too."
     if ask "Delete the build container?" n; then
       run "$HOME/.local/bin/distrobox" rm --force dev </dev/null
       run podman image rm registry.fedoraproject.org/fedora-toolbox:44 >/dev/null 2>&1 || true

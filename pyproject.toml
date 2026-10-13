@@ -5,11 +5,17 @@ description = "Desktops in VR on the Steam Frame"
 readme = "README.md"
 requires-python = ">=3.12"
 
-# Frametop's Python dependencies, locked in uv.lock. The Frame's runtime apps
-# (input settings uses Kirigami) still come from the container's dnf packages;
-# these groups cover everything uv can pin: dev tooling and the hand tracker's
-# NumPy/OpenCV stack (Fedora's python3-opencv pulls in over a gigabyte).
+# Frametop's Python dependencies, locked in uv.lock. The Frame runs the Python
+# that needs more than the host's python3 in a Flatpak on KDE's runtime
+# (pack/flatpak, pack/host-and-flatpak.md): the apps group's PySide6 is the
+# runtime's Qt minor, with Kirigami and the desktop style coming from the
+# runtime itself, and the tracker group is the eye and hand trackers'
+# NumPy/OpenCV stack. The dev group is CI's tooling.
 [dependency-groups]
+# Frametop Display Settings, Input Settings, Remote Displays, the Hand Recorder
+apps = [
+    "PySide6-Essentials>=6.11,<6.12",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.14",

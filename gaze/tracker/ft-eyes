@@ -8,10 +8,11 @@ slip estimate (eyes_model.py), and publishes the result in /dev/shm/frametop-eye
 where ft-gaze reads it as the source "own". It touches /dev/shm/frametop-eyes-want every
 second, and ft-eyegrab copies frames only while someone does.
 
-The gaze service (gaze/ft-gazed) runs it in the dev container, with --watch-stdin (it quits
-when its stdin closes), while Eye tracker is Own tracker or the gaze probe uses it. The
-probe calibrates and teaches it; the gaze pointer's nudges reach it as clicks, from ft-gazed.
-By hand: distrobox enter dev -- python3 gaze/tracker/ft-eyes -v
+The gaze service (gaze/ft-gazed) runs it in Frametop's Python runtime (scripts/ft-python, the
+Flatpak with numpy and OpenCV), with --watch-stdin (it quits when its stdin closes), while Eye
+tracker is Own tracker or the gaze probe uses it. The probe calibrates and teaches it; the
+gaze pointer's nudges reach it as clicks, from ft-gazed.
+By hand: scripts/ft-python gaze/tracker/ft-eyes -v
 
 Calibration: ~/.local/state/frametop/gaze/eyes/calibration.json, made by the gaze probe's
 calibration with the tracker toggle on Own tracker (or lab/ft-eyes-score --save CAPTURE).

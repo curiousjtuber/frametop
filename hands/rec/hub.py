@@ -195,8 +195,8 @@ def _hf():
     try:
         import huggingface_hub
     except ImportError:
-        raise HubError("missing", "huggingface_hub isn't installed in the dev container: run setup/dev-container.sh "
-                                  "(or: pip install --user huggingface_hub)") from None
+        raise HubError("missing", "huggingface_hub isn't installed: reinstall Frametop's Python runtime "
+                                  "(pack/flatpak/install.sh), or: pip install --user huggingface_hub") from None
     return huggingface_hub
 
 

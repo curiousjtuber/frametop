@@ -1,0 +1,64 @@
+# Frametop's Python runtime, as a Flatpak (pack/host-and-flatpak.md): KDE's runtime (Qt,
+# Kirigami, the org.kde.desktop style, Breeze, zstd), PySide6 of the runtime's Qt minor, and
+# the trackers' numpy and OpenCV, from uv.lock (build/python-packages.json, written by
+# modules.py). It holds none of Frametop's code: scripts/ft-python runs the repo's .py files in
+# it, with the repo mounted read-only, so the settings apps, the Hand Recorder and ft-eyes
+# are edited and run like any script, and this is rebuilt only when uv.lock changes.
+# pack/flatpak/build.sh builds it (flatpak-builder) into a bundle, build/frametop.flatpak;
+# pack/flatpak/install.sh installs a bundle, or builds one when there's none.
+id: io.github.frametop.Frametop
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: python3
+finish-args:
+  # What the apps reach outside (the table in pack/host-and-flatpak.md), and no more:
+  # the desktop's Wayland socket (ft-python names the nested session's, as an absolute
+  # WAYLAND_DISPLAY) and the GPU
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Frametop's own sockets (the input relay, ft-screens, ft-powerd, ft-gazed) are abstract
+  # Unix sockets, which belong to the network namespace
+  - --share=network
+  # ft-eyes: SteamVR's eye-server.mmap and ft-eyegrab's frames, in the host's /dev/shm
+  # (--device=all would not mount it; this needs flatpak 1.15.6)
+  - --device=shm
+  # the apps' host commands (desktops.sh restart, ft-layout, systemd-run, pkexec, the gaze
+  # probe) go through flatpak-spawn --host, the portal on the user's real session bus
+  - --socket=session-bus
+  - --talk-name=org.freedesktop.Flatpak
+  # the host's /etc at /run/host/etc: the apps look for the eye tracker's grabber and the
+  # Bluetooth fixes there, as they did from the dev container
+  - --filesystem=host-etc
+  # Frametop's settings and state. The three files are bind-mounted one by one, so they
+  # have to exist before the app starts (:create would make a missing one a directory):
+  # scripts/ft-python makes them. The apps rewrite them in place, which a bind mount allows.
+  - --filesystem=xdg-config/frametop.conf
+  - --filesystem=xdg-config/frametop-input.json
+  - --filesystem=xdg-config/frametop-layout.json
+  - --filesystem=xdg-config/frametop:create
+  - --filesystem=xdg-config/openvr:ro
+  - --filesystem=xdg-data/frametop:create
+  # The desktop's runtime dir (its Wayland socket is how the apps tell it's running) and
+  # hand tracking's (the recorder reads the hands file)
+  - --filesystem=xdg-run/frametop
+  - --filesystem=xdg-run/frametop-hands
+  # the programs' logs, which the apps and ft-eyes write and read in /tmp
+  - --filesystem=/tmp
+  # The runtime's python3 sees the packages pip installed under /app. PySide6 runs on the
+  # runtime's Qt (modules.py says why), but points it at the wheel's own, gone, folders for
+  # plugins and QML; these name the runtime's (the platform plugins, the KDE platform theme,
+  # Kirigami, the desktop style and its kf6 plugins).
+  - --env=PYTHONPATH=/app/lib/python3.13/site-packages
+  - --env=QT_PLUGIN_PATH=/usr/lib/plugins
+  - --env=QML_IMPORT_PATH=/usr/lib/qml
+  - --env=QT_QUICK_CONTROLS_STYLE=org.kde.desktop
+modules:
+  - build/python-packages.json
+  # flatpak-builder wants the command under /app/bin; it's the runtime's python3
+  - name: command
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/bin && ln -s /usr/bin/python3 /app/bin/python3

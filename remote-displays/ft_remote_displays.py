@@ -30,7 +30,6 @@ import http.client
 import json
 import os
 import re
-import shutil
 import socket
 import ssl
 import subprocess
@@ -65,15 +64,17 @@ RESOLUTIONS = [(1920, 1080, ""), (2560, 1440, ""), (3840, 2160, "4K"), (2560, 10
 
 
 def host_command(*cmd):
-    """argv to run a command on the SteamOS host (we live in the dev container).
-
-    distrobox-host-exec reaches the host through the user's real session bus; inside the
-    desktop our DBUS_SESSION_BUS_ADDRESS is the nested session's private one, where it
-    fails (exit 127, silently)."""
-    if not shutil.which("distrobox-host-exec"):
+    """argv to run a command on the SteamOS host. We live in Frametop's Python runtime, a
+    Flatpak (scripts/ft-python): flatpak-spawn runs it outside, through the portal on the
+    user's real session bus. The command gets that bus too (ours is the sandbox's proxy,
+    where systemd-run fails) and the desktop's Wayland socket, which ft-python hands us as
+    FT_HOST_WAYLAND_DISPLAY (ours is the sandbox's). Run by hand on the host, plain."""
+    if not os.path.exists("/.flatpak-info"):
         return list(cmd)
-    bus = f"unix:path=/run/user/{os.getuid()}/bus"
-    return ["env", f"DBUS_SESSION_BUS_ADDRESS={bus}", "distrobox-host-exec"] + list(cmd)
+    env = [f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{os.getuid()}/bus"]
+    if os.environ.get("FT_HOST_WAYLAND_DISPLAY"):
+        env.append("WAYLAND_DISPLAY=" + os.environ["FT_HOST_WAYLAND_DISPLAY"])
+    return ["flatpak-spawn", "--host", "env", *env, *cmd]
 
 
 def token_path(address):

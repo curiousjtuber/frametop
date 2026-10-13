@@ -34,7 +34,6 @@ import fnmatch
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -180,8 +179,8 @@ def key_bindings(rules):
 # The gaze service's settings (gaze/ft-gazed): whose eye tracking, and the eye bias. GAZE_TRACKER
 # can also be auto (the default): ours when it's installed, else SteamVR's.
 GAZE_TRACKERS = {"steam": "SteamVR's eye tracker", "own": "our own eye tracker"}
-# Our tracker's frame grabber (gaze/tracker/install.sh), on the host: this runs in the dev
-# container, which has the host's /etc under /run/host.
+# Our tracker's frame grabber (gaze/tracker/install.sh), on the host: this runs in Frametop's
+# Flatpak, which has the host's /etc under /run/host.
 EYEGRAB = ("/etc/frametop/ft-eyegrab", "/run/host/etc/frametop/ft-eyegrab")
 GAZE_EYES = {"auto": "auto", "left": "left eye", "right": "right eye"}
 # Pointer settings: key, label, default, min, max, step, unit.
@@ -267,11 +266,24 @@ def write_conf_value(key, value):
         f.write("\n".join(lines) + "\n")
 
 
+def host_command(*cmd):
+    """argv to run a command on the SteamOS host. We live in Frametop's Python runtime, a
+    Flatpak (scripts/ft-python): flatpak-spawn runs it outside, through the portal on the
+    user's real session bus. The command gets that bus too (ours is the sandbox's proxy,
+    where systemd-run fails) and the desktop's Wayland socket, which ft-python hands us as
+    FT_HOST_WAYLAND_DISPLAY (ours is the sandbox's). Run by hand on the host, plain."""
+    if not os.path.exists("/.flatpak-info"):
+        return list(cmd)
+    env = [f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{os.getuid()}/bus"]
+    if os.environ.get("FT_HOST_WAYLAND_DISPLAY"):
+        env.append("WAYLAND_DISPLAY=" + os.environ["FT_HOST_WAYLAND_DISPLAY"])
+    return ["flatpak-spawn", "--host", "env", *env, *cmd]
+
+
 def host(*cmd):
-    """Run a command on the SteamOS host (we live in the dev container)."""
-    runner = ["distrobox-host-exec"] if shutil.which("distrobox-host-exec") else []
+    """Run a command on the SteamOS host, and wait for it."""
     try:
-        return subprocess.run(runner + list(cmd), capture_output=True, text=True, timeout=20)
+        return subprocess.run(host_command(*cmd), capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired) as e:
         return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
@@ -1202,11 +1214,14 @@ class Backend(QObject):
         self._open_probe([], "Opening the gaze probe (a development tool)")
 
     def _open_probe(self, args, done):
-        runner = ["distrobox-host-exec"] if shutil.which("distrobox-host-exec") else []
-        env = [f"{k}={os.environ[k]}" for k in ("WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS")
-               if os.environ.get(k)]
+        # A window in the Frametop desktop: the session's socket and bus, which ft-python
+        # hands us as FT_HOST_* (inside the sandbox, ours are the sandbox's own).
+        env = {k: os.environ.get("FT_HOST_" + k) or os.environ.get(k)
+               for k in ("WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
+        env.update({k: os.environ[k] for k in ("DISPLAY", "XAUTHORITY") if os.environ.get(k)})
+        argv = host_command("env", *[f"{k}={v}" for k, v in env.items() if v], GAZE_PROBE, *args)
         try:
-            subprocess.Popen(runner + ["env"] + env + [GAZE_PROBE] + args, stdin=subprocess.DEVNULL,
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             self.message.emit(done, False)
         except OSError as e:

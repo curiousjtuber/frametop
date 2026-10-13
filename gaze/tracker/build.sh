@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build our own eye tracker on the Frame host, with its own gcc and Python:
-#   build/ft-eyegrab   the frame grabber. It runs as root (frametop-eyegrab.service,
-#                      gaze/tracker/install.sh); scripts/host-glibc.sh checks it needs no glibc
-#                      symbol newer than the host's, as every build here does.
-#   build/venv         Python with numpy and OpenCV (requirements.txt) for ft-eyes and lab/,
-#                      remade when requirements.txt changes.
+# Build our own eye tracker's frame grabber on the Frame host, with its own gcc:
+#   build/ft-eyegrab   runs as root (frametop-eyegrab.service, gaze/tracker/install.sh);
+#                      scripts/host-glibc.sh checks it needs no glibc symbol newer than the
+#                      host's, as every build here does.
+# ft-eyes itself and lab/ run in Frametop's Python runtime (scripts/ft-python, pack/flatpak),
+# which brings their numpy and OpenCV; nothing of theirs is built.
 # Usage: gaze/tracker/build.sh
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -13,12 +13,4 @@ exec "$root/scripts/frame.sh" --host -C gaze/tracker 'set -e; mkdir -p build
 . ../../scripts/host-glibc.sh
 gcc -std=gnu11 -O2 -Wall -Wextra -pthread -o build/ft-eyegrab ft-eyegrab.c
 host_glibc_check build/ft-eyegrab
-echo "built build/ft-eyegrab"
-if ! cmp -s requirements.txt build/venv/requirements.done; then
-  rm -rf build/venv
-  /usr/bin/python3 -m venv build/venv  # the host Python, not a shell one (mise, pyenv)
-  build/venv/bin/pip install -q --disable-pip-version-check -r requirements.txt
-  cp requirements.txt build/venv/requirements.done
-fi
-v=$(build/venv/bin/python -c "import numpy, cv2; print(\"numpy\", numpy.__version__, \"opencv\", cv2.__version__)")
-echo "build/venv: $v"'
+echo "built build/ft-eyegrab"'

@@ -17,7 +17,8 @@
 #                        18 s are recorded in all, a few hundred MB before compression
 #   --keep               keep the temporary folders (camera images of a room: delete them after)
 #
-# It runs in the dev container (where ft-hands, ft-handpanel, zstd and huggingface_hub are),
+# It runs on the host (ft-hands and ft-handpanel are built for it; the recorder's Python runs
+# in Frametop's Flatpak through scripts/ft-python, which hands/rec/session.py does itself),
 # and in one frame-job scope when frame-job is installed, so it stays capped while the headset
 # is worn. Everything goes in temporary folders that are deleted at the end, and every process
 # it started is stopped, also on Ctrl+C. A tracking ft-hands that's already running is used as
@@ -27,24 +28,6 @@ here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 root=$(cd "$here/../.." && pwd)
 uid=$(id -u)
 
-if [ ! -e /run/.containerenv ]; then
-  "$root/scripts/container-up.sh"
-  # Ctrl+C and kill don't reach through distrobox: the rehearsal inside writes its PID to this
-  # file, and a signal here is passed on to it, so it still cleans up.
-  pidfile=$(mktemp "/run/user/$uid/ft-handrec-rehearse-pid.XXXXXX")
-  # The real user bus, so frame-job's systemd-run reaches the host's user manager.
-  "$HOME/.local/bin/distrobox" enter dev -- env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-    XDG_RUNTIME_DIR="/run/user/$uid" FT_REHEARSE_PIDFILE="$pidfile" bash "$here/rehearse.sh" "$@" </dev/null &
-  child=$! stopping=0 status=0
-  pass_on() { [ -s "$pidfile" ] && kill -TERM "$(cat "$pidfile")" 2>/dev/null; return 0; }
-  trap 'stopping=1; pass_on' INT TERM HUP
-  while kill -0 "$child" 2>/dev/null; do
-    wait "$child" && status=0 || status=$?   # (set -e would end this on a signal)
-    [ "$stopping" = 0 ] || pass_on
-  done
-  rm -f "$pidfile"
-  exit "$status"
-fi
 if [ -z "${FT_REHEARSE_SCOPE:-}" ] && command -v frame-job >/dev/null; then
   export FT_REHEARSE_SCOPE=1
   cd /tmp   # no .frame-job up from here: it runs locally, capped

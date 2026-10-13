@@ -17,8 +17,8 @@ entry='~/.local/share/applications/frametop-handrec.desktop'
 
 case ${1:-install} in
   install)
-    echo "== 1/4 dev container packages"
-    "$root/setup/dev-container.sh"
+    echo "== 1/4 Frametop's Python runtime (the Flatpak the recorder runs in)"
+    on_frame 'pack/flatpak/install.sh'
     echo "== 2/4 hand tracking: ft-camd and ft-hands"
     "$root/hands/build.sh"
     echo "== 3/4 the headset panel: ft-handpanel"

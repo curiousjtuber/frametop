@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Create or update the "dev" build container on the Steam Frame (Fedora 44 toolbox,
-# aarch64, via distrobox). Safe to re-run: it only creates what's missing and dnf
-# skips installed packages. This package list is the source of truth for rebuilding
-# the container.
+# Create or update the "dev" container on the Steam Frame (Fedora 44 toolbox, aarch64, via
+# distrobox). Only Remote Access needs it now (session/remote-desktop.sh, vnc-bridge.sh:
+# Fedora's krdp, FreeRDP and TigerVNC); Frametop's own programs build and run on the host,
+# and its Python apps in a Flatpak (pack/host-and-flatpak.md), so install.sh no longer runs
+# this. Safe to re-run: it only creates what's missing and dnf skips installed packages.
+# This package list is the source of truth for rebuilding the container.
 # Usage: setup/dev-container.sh   (on the Frame, or from a PC over SSH)
 # Needs distrobox in ~/.local/bin on the Frame (see the top-level README).
 set -euo pipefail

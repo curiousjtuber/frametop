@@ -1,0 +1,58 @@
+#!/bin/bash
+# Runs on the Frame host: run one of Frametop's Python programs in Frametop's Python runtime,
+# the Flatpak pack/flatpak builds (PySide6, Kirigami, numpy, OpenCV; pack/host-and-flatpak.md).
+#   scripts/ft-python [--gui] SCRIPT [ARGS...]
+#   scripts/ft-python --check          # is the runtime installed? (exit status, a line)
+# The repo this tree is goes into the sandbox read-only, so SCRIPT and the modules next to
+# it are the files here, as edited. stdin, stdout and the exit status pass through; a
+# program ended by its stdin closing (--watch-stdin) ends as before.
+# --gui: for an app in a Plasma session on the Frame: the session's Wayland socket, as an
+# absolute WAYLAND_DISPLAY (flatpak connects the sandbox to that one), and the session's
+# bus and socket also as FT_HOST_WAYLAND_DISPLAY and FT_HOST_DBUS_SESSION_BUS_ADDRESS, for
+# a host program the app starts in that session (the gaze probe): inside the sandbox the
+# two variables name the sandbox's own.
+# flatpak itself needs the user's real runtime dir and session bus (the portal that runs the
+# apps' host commands is there), whatever a nested session set.
+# FRAMETOP_PYTHON=/path/to/python runs SCRIPT with that interpreter instead (a PC, a test).
+APP=io.github.frametop.Frametop
+tree=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)
+uid=$(id -u)
+
+if [ "${1:-}" = --check ]; then
+  if [ -n "${FRAMETOP_PYTHON:-}" ]; then echo "FRAMETOP_PYTHON=$FRAMETOP_PYTHON"; exit 0; fi
+  XDG_RUNTIME_DIR=/run/user/$uid flatpak info --user "$APP" >/dev/null 2>&1 && { echo "$APP installed"; exit 0; }
+  echo "$APP isn't installed: run pack/flatpak/install.sh (install.sh does)" >&2
+  exit 1
+fi
+gui=0
+[ "${1:-}" = --gui ] && { gui=1; shift; }
+[ $# -gt 0 ] || { echo "usage: $0 [--gui] SCRIPT [ARGS...]" >&2; exit 2; }
+script=$1; shift
+[ -f "$script" ] || { echo "ft-python: no $script" >&2; exit 2; }
+
+if [ -n "${FRAMETOP_PYTHON:-}" ]; then
+  exec "$FRAMETOP_PYTHON" "$script" "$@"
+fi
+
+env=()
+if [ "$gui" = 1 ]; then
+  wl=${WAYLAND_DISPLAY:-wayland-0}
+  case $wl in /*) ;; *) wl="${XDG_RUNTIME_DIR:-/run/user/$uid}/$wl" ;; esac
+  env+=(--env=WAYLAND_DISPLAY="$wl" --env=FT_HOST_WAYLAND_DISPLAY="$wl"
+        --env=FT_HOST_DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}"
+        --env=QT_QPA_PLATFORM="wayland;xcb")
+  [ -n "${DISPLAY:-}" ] && env+=(--env=DISPLAY="$DISPLAY")
+fi
+# The real ones, for flatpak; the nested session's config dir would also mislead the apps,
+# whose settings are the user's.
+export XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME
+# The settings files go into the sandbox as single-file bind mounts (the manifest), so they
+# have to exist first: an empty object is what their readers take as "nothing saved".
+mkdir -p ~/.config
+[ -e ~/.config/frametop.conf ] || : >~/.config/frametop.conf
+for f in ~/.config/frametop-input.json ~/.config/frametop-layout.json; do
+  [ -e "$f" ] || echo '{}' >"$f"
+done
+exec flatpak run --user --filesystem="$tree:ro" --env=FRAMETOP_TREE="$tree" "${env[@]}" \
+  --command=python3 "$APP" "$script" "$@"
