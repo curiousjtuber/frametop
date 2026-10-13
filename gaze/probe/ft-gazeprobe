@@ -158,13 +158,9 @@ class GazeReader:
         if not HELPER.exists():
             self.on_status(f"ft-gaze isn't built: run {REPO}/gaze/build.sh")
             return
-        env = dict(os.environ)
-        # The Frametop desktop has its own runtime dir; podman needs the real one.
-        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
-        # ft-gaze quits when its stdin closes, which is the one thing distrobox passes on
-        # when we go away (even if we're killed). in-box starts the container first, and picks
-        # the release's own on a release install.
-        self.proc = subprocess.Popen([str(REPO / "scripts" / "in-box"), str(HELPER), "--watch-stdin"], env=env,
+        # ft-gaze is built for the host. It quits when its stdin closes, so it goes away when we
+        # do (even if we're killed).
+        self.proc = subprocess.Popen([str(HELPER), "--watch-stdin"],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      start_new_session=True)
         out = Gio.UnixInputStream.new(self.proc.stdout.fileno(), False)

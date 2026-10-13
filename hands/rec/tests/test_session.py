@@ -751,11 +751,12 @@ class StandaloneTest(unittest.TestCase):
         self.assertIn("--no-gestures", argv)
         run.assert_not_called()   # no container to bring up
 
-    def test_ft_hands_in_the_dev_container(self):
-        self.assertTrue(self.recorder_argv(None)[0].endswith("distrobox"))
-        argv, _ = self.tracker_argv(None)
-        self.assertEqual(argv[:4], [os.path.expanduser("~/.local/bin/distrobox"), "enter", "dev", "--"])
-        self.assertEqual(argv[4], session.FT_HANDS)
+    def test_ft_hands_from_a_checkout(self):
+        # Built for the host too (hands/build.sh): no container, standalone or not.
+        self.assertEqual(self.recorder_argv(None)[0], session.FT_HANDS)
+        argv, run = self.tracker_argv(None)
+        self.assertEqual(argv[0], session.FT_HANDS)
+        run.assert_not_called()
 
     def test_fix_hint(self):
         with mock.patch.object(session, "STANDALONE", self.INFO):

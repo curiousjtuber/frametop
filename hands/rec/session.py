@@ -637,8 +637,6 @@ class Recorder:
                 "--sides", "auto" if swap is None else "1" if swap else "0"]
         if ring:
             argv += ["--ring", ring]
-        if not in_container() and not STANDALONE:
-            argv = [os.path.expanduser("~/.local/bin/distrobox"), "enter", "dev", "--"] + argv
         self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file)
         self.started_ns = mono_ns()
 
@@ -1692,12 +1690,7 @@ class Session:
             raise _Stop()
 
     def _start_tracker(self):
-        argv = [FT_HANDS, "--no-gestures", "--status", "0"]
-        if not STANDALONE:   # built in the dev container: it runs there
-            up = os.path.join(REPO, "scripts", "container-up.sh")
-            if os.access(up, os.X_OK):
-                subprocess.run(host_command(up), capture_output=True, timeout=120)
-            argv = [os.path.expanduser("~/.local/bin/distrobox"), "enter", "dev", "--"] + argv
+        argv = [FT_HANDS, "--no-gestures", "--status", "0"]  # built for the host (hands/build.sh)
         if self.ring:
             argv += ["--ring", self.ring]
         self._start_unit(HANDS_UNIT, "hand tracking for feedback", argv)

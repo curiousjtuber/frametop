@@ -137,7 +137,7 @@ from gazecheck import Checks  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 HELPER = REPO / "gaze" / "build" / "ft-gaze"
-IN_BOX = REPO / "scripts" / "in-box"  # runs a program in the container it was built in
+IN_BOX = REPO / "scripts" / "in-box"  # runs ft-eyes in the dev container (its numpy and OpenCV are there)
 ME = "\0ft_gazed"
 POINTER = "\0ft_pointer_helper"
 EYES_PROG = REPO / "gaze" / "tracker" / "ft-eyes"  # our own tracker
@@ -509,11 +509,9 @@ class Service:
             log(f"ft-gaze isn't built: run {REPO}/gaze/build.sh")
             self.restart_at = time.monotonic() + 30
             return
-        env = dict(os.environ)
-        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"  # podman needs the real one
-        # ft-gaze quits when its stdin closes: the one thing distrobox passes on.
+        # ft-gaze is built for the host; it quits when its stdin closes.
         sources = self.wanted_sources()
-        self.proc = subprocess.Popen([str(IN_BOX), str(HELPER), "--watch-stdin", "--sources", sources], env=env,
+        self.proc = subprocess.Popen([str(HELPER), "--watch-stdin", "--sources", sources],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      start_new_session=True)
         self.proc_sources = sources

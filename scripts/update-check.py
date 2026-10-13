@@ -46,7 +46,7 @@ STEAMVR_SETTINGS = (os.path.join(HOME, ".config/openvr/config/steamvr.vrsettings
                     os.path.join(HOME, ".steam/steam/config/steamvr.vrsettings"))
 VRSERVER = "http://127.0.0.1:27062"  # its web socket: input/vrws.py
 PAUSE_STATE = f"/run/user/{os.getuid()}/frametop-pause.json"  # input/game_pause.py
-HOST_GLIBC = (2, 39)  # the newest the pointer driver may need (pointer/driver/build.sh)
+HOST_GLIBC = (2, 39)  # the newest any program built for the host may need (scripts/host-glibc.sh)
 
 # Packages in the OS image that Frametop depends on, and what to try by hand when one changes.
 PACKAGES = {

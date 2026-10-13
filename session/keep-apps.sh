@@ -17,7 +17,6 @@ keep=()
 while read -r pid; do
   comm=$(cat "/proc/$pid/comm" 2>/dev/null) || continue
   [[ $comm =~ $own ]] && continue
-  # ft-screens' launcher (distrobox enter, podman exec) stays too.
   tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q -e 'ft-screens' -e 'ft-layout' -e 'frametop-session' && continue
   keep+=("$pid")
 done < "/sys/fs/cgroup$cg/cgroup.procs"

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Runs on the Frame host: run a program of this tree in the container it was built for.
+# Runs on the Frame host: run a program in the "dev" container (setup/dev-container.sh).
 #   scripts/in-box PROGRAM [ARGS...]
-# A source install (a clone; the components' build.sh scripts build in the "dev" container)
-# runs its programs in "dev". A release (pack/get-release.sh) runs them in the container made
-# from its image, which its .frametop-release names (BOX=...). FRAMETOP_BOX in the environment
-# overrides both, to try a tree in another container.
+# Frametop's own programs are built for the host and run there (pack/host-and-flatpak.md);
+# what still runs in the container is Remote Access's chain (session/remote-desktop.sh,
+# session/vnc-bridge.sh: krdpserver, Xvnc, xfreerdp from Fedora), and, until the Python apps
+# move to their Flatpak, the settings apps and ft-eyes. FRAMETOP_BOX names another container.
 #
 # It starts the container first, in a scope of its own (scripts/container-up.sh), then
 # becomes `distrobox enter BOX -- PROGRAM ARGS...`: stdin, stdout, and the exit status pass
@@ -12,8 +12,7 @@
 # podman needs the real XDG_RUNTIME_DIR; callers in a nested session pass theirs to the
 # program with env, as they did with distrobox enter.
 tree=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)
-box=${FRAMETOP_BOX:-$(sed -n 's/^BOX=//p' "$tree/.frametop-release" 2>/dev/null | tail -1)}
-box=${box:-dev}
+box=${FRAMETOP_BOX:-dev}
 [[ $box =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || { echo "in-box: not a container name: $box" >&2; exit 2; }
 [ $# -gt 0 ] || { echo "usage: $0 PROGRAM [ARGS...]" >&2; exit 2; }
 XDG_RUNTIME_DIR=/run/user/$(id -u) "$tree/scripts/container-up.sh" "$box"

@@ -99,13 +99,12 @@ if [ "${1:-}" != --inner ]; then
       -- "$0" --inner
   fi
 
-  # ft-screens runs in Frametop's container (it's built against Fedora's wlroots); KWin and
-  # Plasma stay on the host and connect to its socket. in-box starts the container in a scope
-  # of its own, not this desktop's, or stopping the desktop would stop the container.
+  # ft-screens is built for the host (screens/build.sh, wlroots linked in); KWin and Plasma
+  # connect to its socket.
   socket=ft-screens-0
   read -ra screen_args <<< "$("$here/../layout/ft-layout" screen-args)"
   export FT_SCREEN_COUNT=$(( ${#screen_args[@]} / 2 )) FT_FLOAT_SLOTS=$float_slots
-  "$here/../scripts/in-box" "$here/../screens/build/ft-screens" --socket "$socket" \
+  "$here/../screens/build/ft-screens" --socket "$socket" \
     "${screen_args[@]}" --spares "$float_slots" > /tmp/frametop-screens.log 2>&1 < /dev/null &
   stop_screens() { pkill -x ft-screens 2>/dev/null || true; }
   trap stop_screens EXIT
@@ -129,9 +128,8 @@ runtime=$host_runtime/frametop
 # starts its autostart programs as plain detached processes, and those without a window
 # (baloo_file, geoclue's agent) outlive KWin and the bus, one more each session. So stop
 # every process in this desktop's cgroup with our runtime dir, or one inside it (as
-# steamos-nested-desktop makes), in its environment. The container is in a scope of its own
-# (scripts/container-up.sh). Steam and SteamVR are skipped by name, in case one was
-# started from in here.
+# steamos-nested-desktop makes), in its environment. Steam and SteamVR are skipped by name,
+# in case one was started from in here.
 reap() {
   local cg p pids=()
   cg=$(< "/proc/$$/cgroup")

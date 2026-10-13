@@ -7,15 +7,12 @@ After=steamvr.service
 PartOf=steamvr.service
 
 [Service]
-# Runs in the container it was built in (the dev container, or a release's: scripts/in-box,
-# which starts it in a scope of its own). Clean up the process explicitly around it.
+# Built for the host (power/build.sh), so it runs directly.
 ExecStartPre=-/usr/bin/pkill -x ft-powerd
-ExecStart=@REPO@/scripts/in-box @REPO@/power/build/ft-powerd
+ExecStart=@REPO@/power/build/ft-powerd
 # SIGTERM makes ft-powerd turn the displays back on before it exits.
-ExecStopPost=-/usr/bin/pkill -x ft-powerd
 Restart=on-failure
 RestartSec=3
-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
 TimeoutStopSec=5
 
 [Install]

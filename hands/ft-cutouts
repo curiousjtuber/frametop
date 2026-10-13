@@ -34,11 +34,8 @@ case ${1:-status} in
       echo "stopping ft-handsctl's hand tracking (it has pinches and grips)"
     fi
     run_unit $camd frametop-camd.service "the camera broker" "$here/build/ft-camd" --status 60
-    if ! systemctl --user -q is-active $hands; then
-      "$here/../scripts/container-up.sh"  # so stopping the unit can't take the container down
-      pkill -x ft-hands || true
-    fi
-    run_unit $hands frametop-hands.service "hand tracking, no gestures" "$HOME/.local/bin/distrobox" enter dev -- \
+    systemctl --user -q is-active $hands || pkill -x ft-hands || true
+    run_unit $hands frametop-hands.service "hand tracking, no gestures" \
       "$here/build/ft-hands" --status 60 --no-gestures
     "$here/ft-handsctl" cutouts on >/dev/null || true
     sleep 4

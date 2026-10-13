@@ -11,13 +11,13 @@ Every script works in both modes, and must keep working in both:
 
 ```
 scripts/sync.sh                          # PC -> ~/dev/frametop on the Frame
-scripts/frame.sh -C <dir> '<build cmd>'  # runs in the "dev" Fedora distrobox
-scripts/frame.sh --host '<cmd>'          # runs on the SteamOS host
+scripts/frame.sh --host -C <dir> '<cmd>' # runs on the SteamOS host (builds too)
+scripts/frame.sh -C <dir> '<cmd>'        # runs in the "dev" Fedora distrobox
 ```
 
 - From a PC, edit only on the PC. The Frame's copy is a mirror that `sync.sh` overwrites.
-- Build inside the `dev` container. The SteamOS host has a read-only root and no compilers. Container builds link against the container's libraries, so they run in the container (`distrobox enter dev -- ...`); the SteamVR driver is built to run on the host.
-- Container packages the build needs go in the list in `setup/dev-container.sh`, so the container can be rebuilt. Fedora packages that need holding at a version, or a patch, go in `setup/container-pins.sh` (krdp and kpipewire are there now; `setup/README.md` says why), never into the container by hand.
+- Build on the SteamOS host, with the gcc, meson and library headers its image ships; the programs run there too. The root is read-only, so what the host lacks is built into the repo's `build/` folders as static libraries (ft-screens' wlroots, hand tracking's ncnn). CI builds the same `build.sh` scripts in `pack/Containerfile`, whose glibc is the host's version, and every build checks its newest glibc symbol against the host's (`scripts/host-glibc.sh`). [pack/host-and-flatpak.md](pack/host-and-flatpak.md) is the rationale.
+- The `dev` container (`setup/dev-container.sh`) is only for Remote Access (Fedora's krdp, FreeRDP, TigerVNC). Its packages go in that script's list, so it can be rebuilt; Fedora packages that need holding at a version, or a patch, go in `setup/container-pins.sh` (krdp and kpipewire are there now; `setup/README.md` says why), never into the container by hand.
 - Build output goes in `build/` next to the sources. It's gitignored and never synced.
 
 ## The headset may be in use

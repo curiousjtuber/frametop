@@ -281,10 +281,8 @@ class Checks:
             log(f"ft-gazepanel isn't built: run {REPO}/gaze/build.sh")
             self.panel_restart_at = time.monotonic() + 60
             return
-        env = dict(os.environ)
-        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
-        self.panel_proc = subprocess.Popen([str(REPO / "scripts" / "in-box"), str(PANEL_PROG), "--watch-stdin"],
-                                           env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+        self.panel_proc = subprocess.Popen([str(PANEL_PROG), "--watch-stdin"],
+                                           stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                            stderr=subprocess.PIPE, start_new_session=True)
         os.set_blocking(self.panel_proc.stderr.fileno(), False)
         self.sel.register(self.panel_proc.stderr, selectors.EVENT_READ, "panel")
