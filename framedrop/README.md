@@ -13,7 +13,7 @@ It uses Valve's SteamOS Devkit path: pair once with the headset's devkit service
 `probe/probe.sh`, started as a Devkit Game, recorded:
 
 - Devkit titles run on the host, not in a container, as user `steamos`, from a process tree that Steam's reaper owns. This held even with the compat tool set to `SteamLinuxRuntime_4-arm64`: Steam recorded the mapping and still ran it on the host.
-- On the host, everything the installer needs works: git, curl to GitHub, podman (sees the `dev` container), `systemctl --user`, `systemd-run --user`, and GTK 4 with libadwaita.
+- On the host, everything the installer needs works: git, curl to GitHub, flatpak, `systemctl --user`, `systemd-run --user`, and GTK 4 with libadwaita.
 - A GTK window opens in gamescope (an X11 window on `:1`, drawn through gamescope's Vulkan WSI).
 - Steam puts its overlay in `LD_PRELOAD` and Steam runtime paths in `LD_LIBRARY_PATH` and `PATH`. Every host tool prints a preload error unless they're cleared.
 - Inside the Steam Linux Runtime 4 container (started by hand with its `run` script), there's no git, podman, systemctl, or GTK, but `flatpak-spawn --host` runs commands on the host.

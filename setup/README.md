@@ -1,13 +1,13 @@
 # setup
 
-One-time setup for the Steam Frame itself: the `dev` build container and the Bluetooth fixes. `install.sh` runs both, so you only need this page for details, doing a step on its own, or troubleshooting. Run the scripts from the repo root, either in a terminal on the Frame (the usual way) or from a PC over SSH (see "Developing from a PC" in the README).
+One-time setup for the Steam Frame itself: the Bluetooth fixes, and the `dev` container that Remote Access's krdp, FreeRDP and TigerVNC run in. `install.sh` offers the Bluetooth fixes; the container is set up by hand, for Remote Access only (Frametop's own programs build and run on the host, and its Python apps in a Flatpak: `pack/host-and-flatpak.md`). You only need this page for details, doing a step on its own, or troubleshooting. Run the scripts from the repo root, either in a terminal on the Frame (the usual way) or from a PC over SSH (see "Developing from a PC" in the README).
 
 | Script | What it sets up | Needs host `sudo` |
 | --- | --- | --- |
-| `dev-container.sh` | The `dev` build container (Fedora 44 toolbox) with every package the projects need | No |
+| `dev-container.sh` | The `dev` container (Fedora 44 toolbox) for Remote Access's krdp, FreeRDP and TigerVNC | No |
 | `bluetooth/install.sh` | Persistent fixes so Bluetooth LE mice and keyboards reconnect | Yes |
 
-## Build container
+## The dev container (Remote Access)
 
 ```
 setup/dev-container.sh

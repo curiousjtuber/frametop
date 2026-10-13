@@ -33,9 +33,9 @@ You need a Steam Frame with an internet connection, a keyboard (Bluetooth, or th
 
    It asks which version you want: stable (the `main` branch, tested releases) or experimental (the `experimental` branch, the newest features, less tested). Then it clones the repo into `~/frametop` and runs `install.sh`. To choose without the question, add `-s -- --stable` or `-s -- --experimental` after `bash`. By hand, the same is `git clone https://github.com/Frametop/frametop.git ~/frametop`, then `cd ~/frametop` and `./install.sh` (add `--branch experimental` to the clone for experimental).
 
-   The third and fourth choices, stable release and experimental release, download Frametop already built (`Frametop.zip`, about 1.1 GB, from the [releases](https://github.com/Frametop/frametop/releases)) and install it without compiling anything. `-s -- --release` picks the stable release without the question, and `-s -- --release --experimental` the experimental one.
+   The third and fourth choices, stable release and experimental release, download Frametop already built (`Frametop.zip`, a few hundred MB, from the [releases](https://github.com/Frametop/frametop/releases)) and install it without compiling anything. `-s -- --release` picks the stable release without the question, and `-s -- --release --experimental` the experimental one.
 
-   The installer sets up distrobox in your home folder (the system files aren't touched), a Fedora build container, and everything else. The first run downloads 1–2 GB. It asks you four things along the way: whether to install gaze mode (experimental, yes by default), our own eye tracker for it (yes by default), and the Bluetooth fixes, then whether to restart SteamVR. The eye tracker and the Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
+   The installer builds Frametop's programs on the headset with SteamOS's own compiler, and installs Frametop's Python runtime, a Flatpak on KDE's runtime (about 1 GB from Flathub the first time, shared with other KDE apps). The system files aren't touched. It asks you four things along the way: whether to install gaze mode (experimental, yes by default), our own eye tracker for it (yes by default), and the Bluetooth fixes, then whether to restart SteamVR. The eye tracker and the Bluetooth fixes need your `sudo` password; if you've never set one, run `passwd` first, or skip them for now. SteamVR has to restart once at the end, which closes everything open in VR, including the terminal. Rebooting the headset works too.
 
 After the restart, Launch a program → Desktop opens the multi-screen desktop, with its screens arranged around where you're facing. Frametop Display Settings and Frametop Input Settings are in the desktop's application menu, under Settings. SteamOS's own single-screen desktop is still there, as Native Desktop in the same list.
 
@@ -141,7 +141,7 @@ With the displays off, the headset keeps tracking and rendering, so it uses abou
 This is an early release, tested on one Steam Frame (SteamOS 0.4.5 build 20261007, SteamVR 2.18.2; before that SteamOS 0.3.0 build 20260922, SteamVR 2.17.10).
 
 - A SteamOS or SteamVR update can break parts of it until Frametop catches up. After an update, run `cd ~/frametop && scripts/doctor.sh` in a terminal. It checks what Frametop needs from SteamOS, and says what changed since the versions you last marked as working and what to try. Once everything works, `scripts/doctor.sh --mark-good` records the versions. If something stops working, please report it.
-- The first install downloads 1–2 GB for the build container and compiles everything on the headset, which takes several minutes.
+- The first install compiles Frametop on the headset, which takes several minutes, and downloads KDE's runtime for the settings apps (about 1 GB) unless another KDE Flatpak brought it already. A release (`get.sh --release`) compiles nothing.
 - During a VR game, mapped controller buttons belong to the game, so they can't bring the screens up. The pause gesture still works: Frametop reads it without taking the thumbsticks from the game. With the automatic pause off, open the SteamVR dashboard, press Meta+Shift+H, or use a mapped mouse button instead.
 - Flatscreen games aren't detected as games, so they don't pause Frametop by themselves: click both thumbsticks twice to pause it. If your controllers end up working the screens instead of the game, set Controllers on the screens to "Only with the SteamVR dashboard open" (Frametop Display Settings, Visibility & pins tab).
 - Typing follows your last click. A controller click on a panel other than the screens (the dashboard, a Steam app) doesn't move typing there; click it with the mouse, or click a screen to bring typing back.
@@ -189,7 +189,7 @@ curl -fsSL https://frametop.github.io/frametop/uninstall.sh | bash
 It works in two steps, so it never takes away the keyboard, mouse, or desktop you're using while it runs:
 
 1. It stops Frametop from starting. Launch a program → Desktop opens the stock desktop again, and the Native Desktop entry, Frametop's services, its SteamVR driver, and its menu entries are removed, along with the system files of our eye tracker and the Bluetooth fixes and the file capabilities of hand tracking's camera broker (those need your `sudo` password). Everything running now keeps running until you restart the headset, and it offers to restart it for you.
-2. After the restart, run the same command again. It deletes the code in `~/frametop`, and asks whether to delete your settings, any eye or hand recordings, and the build container (1–2 GB) too.
+2. After the restart, run the same command again. It deletes the code in `~/frametop`, and asks whether to delete your settings, any eye or hand recordings, and Frametop's Python runtime (the Flatpak) too.
 
 To see what it would do without changing anything, add `-s -- --dry-run` after `bash`. If the code isn't in `~/frametop`, add `-s -- --dir <folder>`. From the repo, the same script is `./uninstall.sh`.
 
@@ -217,14 +217,14 @@ A Plasma session runs nested inside ft-screens (`screens/`), a small Wayland com
 | `power/` | ft-powerd: turns the displays off while the headset isn't used. |
 | `gaze/` | Gaze mode (experimental): the gaze service, its calibration panel, our own eye tracker, and the gaze probe. See [gaze/README.md](gaze/README.md). |
 | `hands/` | Hand tracking (experimental, deferred: the installer doesn't offer it). See [hands/README.md](hands/README.md). |
-| `display-settings/`, `input-settings/` | The two settings apps (Kirigami, Python). |
+| `display-settings/`, `input-settings/` | The two settings apps (Kirigami, Python; they run in Frametop's Python runtime, a Flatpak: `pack/flatpak/`). |
 | `remote/` | Frametop Remote Access, the app that turns remote desktop over RDP and VNC on and off. |
-| `setup/` | The build container and the Bluetooth fixes. See [setup/README.md](setup/README.md). |
+| `setup/` | The Bluetooth fixes, and Remote Access's `dev` container. See [setup/README.md](setup/README.md). |
 | `scripts/` | Helpers the installers use. They run commands locally on the Frame, or over SSH from a PC. |
 
 ## Packaging
 
-`pack/` builds Frametop as an OCI image: the toolchain, the native binaries, and the locked Python environment (via [uv](https://docs.astral.sh/uv/)), built and tested by GitHub Actions. It is the groundwork for installing Frametop without building anything on the headset. No installer uses it yet. For development, `./ft dev build` builds the image and `./ft dev test` runs the tests inside it. [pack/design.md](pack/design.md) explains why an image and what is still open, and [pack/README.md](pack/README.md) documents the image itself.
+Frametop's programs are built for the SteamOS host and run there; the Python apps that need more than the host's Python (the settings apps, ft-eyes) run in a Flatpak on KDE's runtime. `pack/` has the build image CI builds them in (its glibc is the host's), the Flatpak's manifest, and the release installer; a release is one `Frametop.zip` with the built tree and the Flatpak bundle. [pack/README.md](pack/README.md) is the reference and [pack/host-and-flatpak.md](pack/host-and-flatpak.md) the rationale.
 
 ## Developing from a PC
 
@@ -252,14 +252,14 @@ Then run `./install.sh` from the PC. If SteamVR isn't running on the Frame, the 
 scripts/doctor.sh                  # is the Frame reachable and ready?
 scripts/doctor.sh --mark-good      # and record the versions Frametop works with
 scripts/sync.sh                    # copy the repo to ~/dev/frametop on the Frame
-scripts/frame.sh '<cmd>'           # run in the dev container, in the Frame's copy
-scripts/frame.sh -C <dir> '<cmd>'  # same, in a folder of the repo
-scripts/frame.sh --host '<cmd>'    # run on the SteamOS host
+scripts/frame.sh --host '<cmd>'    # run on the SteamOS host, in the Frame's copy
+scripts/frame.sh --host -C <dir> '<cmd>'  # same, in a folder of the repo
+scripts/frame.sh '<cmd>'           # run in the dev container (Remote Access's)
 ```
 
 The sync only goes one way. It makes the Frame's copy match your checkout, deleting files there that you've removed, and skips `.git`, `build/`, `.env`, and anything gitignored. Edit on the PC only, since the next sync overwrites changes made in `~/dev/frametop` on the Frame.
 
-Programs built in the `dev` container link against its glibc, which is newer than the host's, so they run inside the container. The SteamVR driver is the exception and is built to run on the host (see `pointer/driver/build.sh`). [AGENTS.md](AGENTS.md) has the working rules, including what not to restart while someone is using the headset.
+The programs are built on the host with the toolchain its image ships (`screens/build.sh` and the others; wlroots and ncnn are built as static libraries the first time, and a checkout that last built in the old `dev` container has those products made again, since `build/.toolchain` records what built them), and the Python apps run from the checkout in the Flatpak (`scripts/ft-python`), so an edit to them needs no build. [AGENTS.md](AGENTS.md) has the working rules, including what not to restart while someone is using the headset.
 
 ## License
 

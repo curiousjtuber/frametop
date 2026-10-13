@@ -353,6 +353,37 @@ def check_root_files():
             report("ok", label, "installed, and kept through SteamOS updates")
 
 
+def check_libraries():
+    """The host libraries the installed programs link (ft-screens' mesa, wayland and the rest):
+    a SteamOS update that drops or renames one leaves a program that can't start."""
+    programs = installed_binaries()
+    if not programs:
+        report("skip", "host libraries", "no installed Frametop programs found")
+        return
+    missing, newer = {}, {}
+    for path in sorted(programs):
+        try:
+            out = subprocess.run(["ldd", path], capture_output=True, text=True, timeout=20).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        for line in out.splitlines():
+            # "libfoo.so.1 => not found", or "version `GLIBC_2.43' not found (required by ...)":
+            # a program built against a newer library than the host's (the dev container's).
+            version = re.search(r"version `([^']+)' not found", line)
+            if version:
+                newer.setdefault(os.path.basename(path), set()).add(version.group(1))
+            elif "not found" in line:
+                missing.setdefault(line.split()[0], set()).add(os.path.basename(path))
+    for lib, by in sorted(missing.items()):
+        report("FAIL", f"library {lib}", f"missing on this SteamOS; {', '.join(sorted(by))} can't start. "
+               "Rebuild (the build scripts) or wait for a release built for this SteamOS")
+    for program, versions in sorted(newer.items()):
+        report("FAIL", program, f"needs {', '.join(sorted(versions))}, newer than this SteamOS has: it was built "
+               "for another system (the dev container?). Rebuild it on the host (the build scripts)")
+    if not missing and not newer:
+        report("ok", "host libraries", f"every library the {len(programs)} installed programs link is here")
+
+
 def check_openvr():
     needs = {}  # interface version: programs built against it
     for path in installed_binaries():
@@ -591,6 +622,7 @@ def main():
     else:
         sockets = unix_sockets()
         desktop_up = run("pgrep", "-x", "ft-screens")[0] == 0
+        check_libraries()
         check_openvr()
         check_overlays(desktop_up)
         check_services(sockets, desktop_up)

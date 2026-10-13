@@ -48,15 +48,14 @@ grep -a -o 'vrcompositor [0-9.]* startup' $logs/vrcompositor.txt 2>/dev/null | t
 if [ -f "$repo/.frametop-release" ]; then
   rel() { sed -n "s/^$1=//p" "$repo/.frametop-release" | tail -1; }
   echo "Frametop release $(rel VERSION) ($(rel COMMIT | cut -c1-7), $(rel CHANNEL)) in $repo"
-  box=$(rel BOX)
 else
   git -C "$repo" log -1 --format='Frametop %h (%cd)' --date=short 2>/dev/null || echo "Frametop: not a git checkout"
   git -C "$repo" branch --show-current 2>/dev/null | sed 's/^/branch: /'
-  box=${FRAME_BOX:-dev}
 fi
-~/.local/bin/distrobox version 2>/dev/null || echo "distrobox: not installed"
-podman container inspect -f "container $box: running={{.State.Running}} image={{.ImageName}}" "$box" 2>/dev/null ||
-  echo "container $box: missing"
+XDG_RUNTIME_DIR=/run/user/$(id -u) "$repo/pack/flatpak/install.sh" --status 2>/dev/null || echo "Python runtime: unknown"
+box=${FRAME_BOX:-dev}  # Remote Access's container, when it's there
+podman container inspect -f "container $box (Remote Access): running={{.State.Running}} image={{.ImageName}}" "$box" 2>/dev/null ||
+  echo "container $box (Remote Access): none"
 
 section Services
 for u in frametop-input-relay frametop-pointer frametop-power frametop-gaze frametop-desktop; do

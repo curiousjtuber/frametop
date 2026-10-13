@@ -104,7 +104,7 @@ hands/build/ft-hands                  # status every 5 s; Ctrl+C to stop
 hands/build/ft-hands --int8           # the 8-bit models (models/ncnn/*-int8.ncnn.*)
 ```
 
-Run it in the dev container (`distrobox enter dev -- ...`). It reads the factory calibration from `/persist` (`/run/host/persist` in the container).
+It runs on the host. It reads the factory calibration from `/persist`.
 
 Options:
 
@@ -204,7 +204,7 @@ hands/build/ft-handreplay ~/.local/share/frametop/hands/rec-20260929-120000 --co
 
 ## Tools
 
-Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, because Fedora's `python3-opencv` pulls in over a gigabyte; in the dev container, run `sudo dnf install python3-numpy python3-opencv` once. Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
+Python, with NumPy and OpenCV: Frametop's Python runtime has them (the Flatpak, `pack/flatpak`), so on the Frame run them with `scripts/ft-python hands/tools/TOOL.py ...`. Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
 
 - `tools/check_sides.py --ring` (or a recording, a sets file, `--pair upper`, `--calib DIR`, `--json`): are the side cameras named right, from the scene? ft-handreplay's `--sides file|0|1|auto` replays with DIR/sides.json's names (the default), as recorded, exchanged, or as auto decides, and reports what the side check found and when.
 - `tools/check_color.py REC`: how the colour module's calibration maps onto its images.
@@ -214,7 +214,7 @@ Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, be
 - `tools/cut_sets.py REC OUT [--sets N | --at I,J,...]`: copies a few frame sets (by default 8, spread evenly) out of a recording into a small one, to look at or check elsewhere without moving gigabytes. Plain Python, so it also runs on the Frame's host.
 - `tools/convert_models.py`: how `models/ncnn` was made from the OpenCV Zoo ONNX ports of MediaPipe's models (see `models/NOTICE`).
 
-To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s]` (built by `screens/build.sh`, run in the dev container, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens.
+To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s]` (built by `screens/build.sh`, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens.
 
 ## Camera check
 

@@ -34,13 +34,13 @@ A Steam Frame is someone's personal headset, and they may be wearing it while yo
 
 A SteamOS update replaces SteamVR, KWin, and gamescope with the rest of the OS image. When a change starts depending on something from the image (a host file, an OpenVR interface outside the bundled header, an undocumented layout or output format, a SteamVR or KWin quirk), add a check for it to `scripts/update-check.py`, or a retest hint for its package there. [docs/design.md](docs/design.md) has the background.
 
-## The image (`pack/`)
+## Building and packaging (`pack/`)
 
-`pack/Containerfile` builds Frametop as an OCI image, the groundwork for installing without building on the headset; no installer uses it yet. [pack/design.md](pack/design.md) explains why and what is open, and [pack/README.md](pack/README.md) documents the specifics. Rules:
+`pack/Containerfile` is the build environment CI builds the release in: Ubuntu 24.04, whose glibc is the host's, running the components' own `build.sh` scripts; `pack/flatpak/` is the Python runtime; `pack/install-release.sh` installs a release's `Frametop.zip` (the built tree and the Flatpak bundle). [pack/host-and-flatpak.md](pack/host-and-flatpak.md) explains why, and [pack/README.md](pack/README.md) documents the specifics. Rules:
 
-- **Pin every input.** Base images by digest, Python via `uv.lock` (commit the lock, never a bare `uv pip install`), downloads by tag or commit and sha256, CI actions by commit SHA.
-- **One build recipe.** The image runs the components' own `build.sh` scripts (`FRAME_IN_BOX=1`), and the OpenVR SDK they build against is pinned in `scripts/openvr.sh`. Change a build there, not in the Containerfile, and keep the Containerfile buildable on arm64, the only architecture the Frame has.
-- **Keep the tests green in the image.** `./ft dev test` runs `just test` inside it, and CI runs the same recipes. A new offline test that needs no headset goes in the `justfile` too.
+- **Pin every input.** Base images by digest, Python via `uv.lock` (commit the lock, never a bare `uv pip install`), downloads by tag or commit and sha256 (the libraries the image builds, wlroots, ncnn, the OpenVR SDK in `scripts/openvr.sh`), CI actions by commit SHA.
+- **One build recipe.** The image runs the components' own `build.sh` scripts (`FRAME_IN_BOX=1`). Change a build there, not in the Containerfile, and keep it building on arm64, the only architecture the Frame has. A program must pass `scripts/host-glibc.sh`: what runs on the host may need no glibc symbol newer than the host's.
+- **Keep the tests green in the image and in the Flatpak.** `./ft dev test` runs `just test` inside the image, and CI runs the same recipes; the suites that need KDE (PySide6, kwriteconfig6) run in the Flatpak (`release.yml`). A new offline test that needs no headset goes in the `justfile` too, or in that CI step when it needs KDE.
 
 ## Names
 

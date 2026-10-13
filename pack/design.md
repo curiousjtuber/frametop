@@ -1,5 +1,11 @@
 # Frametop packaging: the OCI image as the product
 
+> **Revised (2026-10-12):** the problem analysis below still holds; the conclusion changed.
+> The image is now the build environment, what it builds runs on the SteamOS host, and the
+> Python apps run in a Flatpak. [host-and-flatpak.md](host-and-flatpak.md) is the current
+> design and says what this plan got right and what the built programs' actual dependencies
+> showed. This page is kept as the record it is.
+
 This is the design rationale for packaging Frametop as a CI-built OCI image.
 [pack/README.md](README.md) is the practical reference (what the image
 contains, the mount matrix, CI); this file explains why it is built this way,
