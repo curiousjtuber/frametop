@@ -2,7 +2,7 @@
 # The runtime trial (HEADSET-TESTS.md, "Frametop from the image"): switch this Frame's Frametop
 # to a release, installed from its Frametop.zip, and back to what was there.
 #   pack/trial.sh on DIR    # DIR: the unpacked zip's Frametop folder (install-release.sh in it)
-#   pack/trial.sh desktop   # restart the VR desktop from the release (ft-screens in its container)
+#   pack/trial.sh desktop   # restart the VR desktop from the release
 #   pack/trial.sh status    # what runs where
 #   pack/trial.sh off       # put it all back
 # on saves what the release's install.sh replaces to ~/.local/state/frametop-trial/saved: the
@@ -11,8 +11,7 @@
 # moves the drop-ins aside (they would override the release's units), runs the release's
 # install-release.sh --yes --no-eye-tracker --no-bluetooth (no sudo: the installed eye grabber
 # stays), and restarts SteamVR so it loads the release's driver and services.
-# off removes those files and puts the saved ones back, stops the release's container, and
-# restarts SteamVR. The release stays in ~/.local/share/frametop/releases for another try.
+# off removes those files and puts the saved ones back, and restarts SteamVR. The release stays in ~/.local/share/frametop/releases for another try.
 # Restarting SteamVR closes everything open in VR.
 set -euo pipefail
 shopt -s nullglob
@@ -80,12 +79,8 @@ case ${1:-status} in
     done < <(paths)
     cp -a "$saved/." "$HOME/"
     systemctl --user daemon-reload
-    restart_steamvr  # first: the release's programs run in its container until SteamVR stops them
+    restart_steamvr  # first: the release's services run until SteamVR stops them
     pkill -x ft-screens || true  # the VR desktop from the release, if it's still up
-    for box in $(podman ps --format '{{.Names}}' | grep -E '^frametop-[0-9a-f]{12}$' || true); do
-      echo "stopping $box"
-      podman stop -t 5 "$box" >/dev/null || echo "couldn't stop $box (podman stop $box)" >&2
-    done
     mv "$saved" "$state/restored-$(date +%Y%m%d-%H%M%S)"
     echo "back as before; restart the VR desktop from Launch a program to leave the release's"
     "$self" status ;;
@@ -98,10 +93,7 @@ case ${1:-status} in
     for name in ft-pointer ft-powerd ft-gaze ft-eyes ft-screens; do
       if [ "$name" = ft-eyes ]; then pids=$(pgrep -f "[/]ft-eyes " || true); else pids=$(pgrep -x "$name" || true); fi
       for pid in $pids; do
-        id=$(grep -o 'libpod-[0-9a-f]\{12\}' "/proc/$pid/cgroup" 2>/dev/null | head -1 | cut -c8-) || id=
-        box=host
-        [ -n "$id" ] && box=$(podman ps --filter "id=$id" --format '{{.Names}}' 2>/dev/null || echo "$id")
-        printf '%-11s pid %-7s in %-22s %s\n' "$name" "$pid" "$box" \
+        printf '%-11s pid %-7s %s\n' "$name" "$pid" \
           "$(tr '\0' ' ' </proc/$pid/cmdline 2>/dev/null | grep -o '/home/[^ ]*' | head -1 || true)"
       done
     done

@@ -28,11 +28,12 @@ if [ ! -f "$wlr/install/lib/libwlroots-0.20.a" ]; then
   curl -fsSL "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/$wlr_ver/wlroots-$wlr_ver.tar.gz" -o "$wlr/src.tar.gz"
   echo "$wlr_sha  $wlr/src.tar.gz" | sha256sum -c --status || { echo "wlroots $wlr_ver does not match its pinned sha256" >&2; exit 1; }
   tar xzf "$wlr/src.tar.gz" -C "$wlr/src" --strip-components=1
-  meson setup --wrap-mode=nofallback -Ddefault_library=static -Dbuildtype=release -Dwerror=false \
-    -Dprefix="$wlr/install" --libdir=lib -Dbackends= -Drenderers= -Dallocators= -Dxwayland=disabled \
-    -Dsession=disabled -Dcolor-management=disabled -Dlibliftoff=disabled -Dxcb-errors=disabled \
-    -Dexamples=false "$wlr/build" "$wlr/src" >/dev/null
-  ninja -C "$wlr/build" >/dev/null
+  # Its output goes to a log, shown when it fails (a dependency the host lacks shows there).
+  { meson setup --wrap-mode=nofallback -Ddefault_library=static -Dbuildtype=release -Dwerror=false \
+      -Dprefix="$wlr/install" --libdir=lib -Dbackends= -Drenderers= -Dallocators= -Dxwayland=disabled \
+      -Dsession=disabled -Dcolor-management=disabled -Dlibliftoff=disabled -Dxcb-errors=disabled \
+      -Dexamples=false "$wlr/build" "$wlr/src" && ninja -C "$wlr/build"; } > "$wlr/build.log" 2>&1 ||
+    { tail -40 "$wlr/build.log" >&2; echo "wlroots did not build (the log: $wlr/build.log)" >&2; exit 1; }
   meson install -C "$wlr/build" --quiet
 fi
 export PKG_CONFIG_PATH=$wlr/install/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}

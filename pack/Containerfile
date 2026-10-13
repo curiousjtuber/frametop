@@ -1,109 +1,94 @@
-# Frametop runtime image (see pack/README.md).
+# Frametop's build environment (pack/host-and-flatpak.md, pack/README.md).
 #
-# One image that holds everything Frametop needs: the frozen toolchain and C
-# libraries, its native binaries, and its locked Python environment. A given
-# image tag always behaves the same, on a PC and on the Frame.
+# One image that builds Frametop's programs for the SteamOS host, with the same build.sh
+# scripts a developer runs on the Frame: its glibc is the host's version (2.39, Ubuntu 24.04),
+# so what links here runs there, and scripts/host-glibc.sh checks every program for it. CI
+# builds the image, runs the test gate in it, and copies the built tree out for the release
+# (.github/workflows/release.yml); `ft dev shell` is the same environment for a developer.
+# Nothing from here runs on the headset as a container.
 #
-# setup/dev-container.sh stays the source of truth for the package list on the
-# Frame's dev container; the list below freezes the runtime-relevant subset of
-# it plus the toolchain (the binaries are built in this image). Keep the two in
-# sync on purpose: dev-container.sh documents *why* each package is there.
-FROM registry.fedoraproject.org/fedora-toolbox:44@sha256:034cb7c472038e2d879ddc19568106a1342aa24403f0d641a0f73dda638707ad
+# Every input is pinned: the base by digest, the libraries below by version and sha256, uv by
+# version and sha256, OpenVR by tag and sha256 (scripts/openvr.sh), the Python packages by
+# uv.lock.
+FROM docker.io/library/ubuntu:24.04@sha256:08571ca13e00ca07a2a84eab83a959b4242e22cceb16486a11bef1428c9e93a7
 
-# Toolchain (the binaries are built in here) and the libraries they link.
-RUN dnf -y install --setopt=install_weak_deps=False \
-      gcc gcc-c++ make pkgconf-pkg-config curl unzip just git cmake ninja-build \
-      pipewire-devel libxkbcommon-devel libinput-devel systemd-devel dbus-devel \
-      libdrm-devel mesa-libgbm-devel wayland-devel vulkan-loader-devel \
-      vulkan-headers plasma-wayland-protocols wlroots-devel pixman-devel \
-      libstdc++-static glibc-static jsoncpp-devel zstd \
-      # remote displays (stream/): moonlight-embedded's libgamestream and
-      # moonlight-common-c, and the host's sound (Opus, PulseAudio)
-      openssl-devel libcurl-devel expat-devel libuuid-devel json-devel \
-      opus-devel pulseaudio-libs-devel \
-      # Frametop Input Settings (Kirigami, PySide6) and remote desktop (krdp):
-      # the KDE/Qt stack has no PyPI wheels, so it stays a dnf package
-      python3-pyside6 kf6-kirigami kf6-qqc2-desktop-style qt6-qtwayland \
-      breeze-icon-theme plasma-breeze krdp freerdp tigervnc-x11-server xrandr \
-    && dnf -y remove 'glibc-langpack-*' \
-    && dnf -y install glibc-langpack-en \
-    && dnf clean all \
-    && rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* \
-              /usr/share/wallpapers
+# The toolchain, and the libraries the programs link, as the host ships them (Ubuntu 24.04's
+# are older than SteamOS's: a program built against them never needs a symbol the host lacks).
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      gcc g++ make meson ninja-build cmake pkg-config git curl ca-certificates xz-utils zstd \
+      unzip just bison binutils libffi-dev libexpat1-dev libxml2-dev python3 python3-venv \
+      libegl-dev libgles-dev libgbm-dev libinput-dev libudev-dev \
+      libcurl4-openssl-dev libssl-dev libopus-dev libpulse-dev uuid-dev libjsoncpp-dev \
+ && rm -rf /var/lib/apt/lists/* \
+ # sh is bash, as on SteamOS (the input relay runs its commands with sh -c; Ubuntu's dash
+ # stops `command -v a b c` at the first name, and the relay's test expects three)
+ && ln -sf bash /usr/bin/sh
 
-# uv, pinned and checked. Python dependencies come from the committed uv.lock,
-# not from whatever PyPI serves on build day.
+# wlroots 0.20 (static, built by screens/build.sh) wants wayland 1.24, wayland-protocols 1.47,
+# libdrm 2.4.129, libxkbcommon 1.8 and pixman 0.46 (its pixman renderer is always built), all
+# newer than Ubuntu 24.04's and none newer than SteamOS's, so they're built here, into
+# /usr/local, at those minimums. The programs link them by soname and load the host's on the
+# Frame.
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+COPY pack/build-lib.sh /usr/local/bin/build-lib
+RUN build-lib wayland 1.24.0 \
+      https://gitlab.freedesktop.org/wayland/wayland/-/releases/1.24.0/downloads/wayland-1.24.0.tar.xz \
+      82892487a01ad67b334eca83b54317a7c86a03a89cfadacfef5211f11a5d0536 \
+      -Dlibraries=true -Dscanner=true -Dtests=false -Ddocumentation=false -Ddtd_validation=false \
+ && build-lib wayland-protocols 1.47 \
+      https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.47/downloads/wayland-protocols-1.47.tar.xz \
+      5fd4349bcbc9bab9a46f8cf77d1f434296a7a052c87440a094f63fcf62a58e20 \
+      -Dtests=false \
+ && build-lib libdrm 2.4.129 \
+      https://dri.freedesktop.org/libdrm/libdrm-2.4.129.tar.xz \
+      5978183f978d697e26a50ba066174964efb0ab97caa1ecaa1b861fbe5ddf77dc \
+      -Dauto_features=disabled -Dtests=false \
+ && build-lib libxkbcommon 1.8.0 \
+      https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.8.0.tar.gz \
+      025c53032776ed850fbfb92683a703048cd70256df4ac1a1ec41ed3455d5d39c \
+      -Denable-x11=false -Denable-wayland=false -Denable-docs=false -Denable-tools=false -Denable-xkbregistry=false \
+ && build-lib pixman 0.46.4 \
+      https://www.cairographics.org/releases/pixman-0.46.4.tar.gz \
+      d09c44ebc3bd5bee7021c79f922fe8fb2fb57f7320f55e97ff9914d2346a591c \
+      -Dtests=disabled -Ddemos=disabled -Dgtk=disabled -Dlibpng=disabled -Dopenmp=disabled
+
+# uv, pinned and checked, for the test gate's Python (the locked dev and tracker groups: pytest,
+# ruff, numpy, OpenCV). The Frame's Python runtime is the Flatpak, not this venv.
 RUN curl -fsSL https://github.com/astral-sh/uv/releases/download/0.12.23/uv-aarch64-unknown-linux-gnu.tar.gz \
       -o /tmp/uv.tar.gz \
  && echo "6524bd338177ed50d035d39354e12545e993bbeba2ecbddf0480c5b3a81d313f  /tmp/uv.tar.gz" | sha256sum -c \
  && tar -xzf /tmp/uv.tar.gz --strip-components=1 -C /usr/local/bin \
  && rm /tmp/uv.tar.gz
+ENV UV_PROJECT_ENVIRONMENT=/opt/frametop/venv UV_PYTHON=/usr/bin/python3 UV_PYTHON_DOWNLOADS=never
+COPY pyproject.toml uv.lock .python-version /src/frametop/
+RUN cd /src/frametop && uv sync --frozen --group tracker --no-cache \
+ && /opt/frametop/venv/bin/python -c 'import numpy, cv2, pytest'
 
-# OpenVR's API library for linking, from the SDK tag the build scripts pin
-# (scripts/openvr.sh fetches the headers). The image has no SteamVR, so the
-# binaries link this copy; their rpath names SteamVR's folder first, so on the
-# Frame they load SteamVR's own libopenvr_api, as the on-device builds do.
-RUN install -d /opt/frametop/bin /opt/frametop/lib \
+# OpenVR's API library for linking, from the SDK tag the build scripts pin (scripts/openvr.sh
+# fetches the headers). The image has no SteamVR, so the programs link this copy; their rpath
+# names SteamVR's folder first, so on the Frame they load SteamVR's own.
+RUN install -d /opt/frametop/lib \
  && curl -fsSL https://github.com/ValveSoftware/openvr/raw/v2.15.6/bin/linuxarm64/libopenvr_api.so \
       -o /opt/frametop/lib/libopenvr_api.so \
  && echo "cc3671d24dd23fb61494e8a8327cf4fe7f638a60508ff7225984a03f2f5947e9  /opt/frametop/lib/libopenvr_api.so" | sha256sum -c
 
-# Python: Fedora's own python3 (the digest-pinned base freezes it), with the
-# locked packages in a venv on top. The venv sees the system site-packages,
-# because PySide6 and Kirigami come from dnf for this python3: one interpreter
-# imports both, as in the dev container on the Frame. Rebuilt only when the
-# lockfile changes, so source edits below reuse this layer.
-# uv sync --frozen --group tracker: the default dev group (pytest/ruff for CI's
-# in-image tests) plus the tracker stack; the types group (mypy) stays out.
-# --no-cache keeps uv's download cache out of the image.
-ENV UV_PROJECT_ENVIRONMENT=/opt/frametop/venv UV_PYTHON=/usr/bin/python3 UV_PYTHON_DOWNLOADS=never
-COPY pyproject.toml uv.lock .python-version /src/frametop/
-RUN uv venv --system-site-packages /opt/frametop/venv \
- && cd /src/frametop && uv sync --frozen --group tracker --no-cache \
- && /opt/frametop/venv/bin/python -c 'import PySide6, numpy, cv2'
-
-# The sources, then the binaries, built by the same build scripts as on the
-# Frame (FRAME_IN_BOX=1: they run here instead of entering the dev container).
-# Each program stays in its build/ folder in /src/frametop and is copied to
-# /opt/frametop. Hand tracking is deferred exactly as in install.sh: it builds
-# ncnn from source and isn't needed until hands/run.sh install runs.
+# The sources, then the programs, built by the same build scripts as on the Frame
+# (FRAME_IN_BOX=1: they run here, as the host's). Each stays in its build/ folder: the tree
+# at /src/frametop, built, is what a release ships. Hand tracking is deferred as in
+# install.sh (ncnn is a heavy, separately triggered build).
 COPY . /src/frametop
 WORKDIR /src/frametop
 ENV FRAME_IN_BOX=1 OPENVR_LIB=/opt/frametop/lib
-RUN screens/build.sh \
- && install -t /opt/frametop/bin screens/build/ft-screens screens/build/ft-handtest
-RUN pointer/helper/build.sh && pointer/driver/build.sh \
- && install -t /opt/frametop/bin pointer/helper/build/ft-pointer \
- && install -t /opt/frametop/lib pointer/driver/build/driver_ft_pointer.so
-RUN gaze/build.sh \
- && install -t /opt/frametop/bin gaze/build/ft-gaze gaze/build/ft-gazepanel
-RUN power/build.sh \
- && install -t /opt/frametop/bin power/build/ft-powerd
-RUN stream/build.sh \
- && install -t /opt/frametop/bin stream/build/ft-stream
-# Our own eye tracker: ft-eyegrab (it runs on the host, as root) and ft-eyes'
-# build/venv, which here only points at the venv above.
-RUN gaze/tracker/build.sh \
- && install -t /opt/frametop/bin gaze/tracker/build/ft-eyegrab
+RUN screens/build.sh
+RUN pointer/helper/build.sh && pointer/driver/build.sh
+RUN gaze/build.sh && gaze/tracker/build.sh
+RUN power/build.sh
+RUN stream/build.sh
+# What the builds leave beside their programs isn't shipped: wlroots' and moonlight's sources
+# and objects (a developer's `ft dev shell` works on the mounted checkout, not this copy).
+RUN rm -rf screens/build/wlroots stream/build/moonlight-embedded stream/build/mlc stream/build/gamestream \
+ && find . -path '*/build/*' -name '*.o' -delete
 
-# A release installs from this image (pack/install-release.sh): it copies
-# /src/frametop, built, to the Frame for its host side (services, the driver,
-# the desktop's scripts), and its install.sh installs this distrobox (1.8.2.5,
-# as a source install clones it, here by commit) to run the image as the
-# container those programs start in (scripts/in-box).
-RUN git init -q pack/build/distrobox \
- && cd pack/build/distrobox \
- && git fetch -q --depth 1 https://github.com/89luca89/distrobox.git 40c3cd724faa434aeb0a23e28776665b92de68bd \
- && git checkout -q FETCH_HEAD \
- && rm -rf .git
-# Programs built against OpenVR look for SteamVR's library here first. In the
-# container on the Frame, distrobox mounts the host at /run/host; elsewhere the
-# link leads nowhere and they use /opt/frametop/lib's.
-RUN ln -s /run/host/opt/steamvr /opt/steamvr
-
-# The default environment: Frametop's binaries and the venv's python3 (Fedora's
-# interpreter, with the locked packages and the dnf Qt stack) first.
-# sleep infinity as the default command keeps the image usable with distrobox
-# create, like the toolbox base.
-ENV PATH=/opt/frametop/venv/bin:/opt/frametop/bin:/usr/local/bin:/usr/bin:/usr/sbin
-CMD ["sleep", "infinity"]
+ENV PATH=/opt/frametop/venv/bin:/usr/local/bin:/usr/bin:/bin
+CMD ["bash"]

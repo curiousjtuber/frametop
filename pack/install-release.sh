@@ -1,34 +1,36 @@
 #!/usr/bin/env bash
 # Install the Frametop release in this folder: a GitHub release's Frametop.zip, unpacked by
 # FrameDrop (into ~/devkit-game/Frametop), by hand, or by get.sh --release. Next to this script
-# are frametop-image.tar (Frametop, built, as a container image) and frametop-release.json (its
-# version, commit, the image file's sha256 and the image's ID, and the SteamOS table). Nothing
-# builds on the headset, and nothing else is downloaded.
+# are frametop-tree.tar.zst (Frametop at the release's commit, its programs built for the
+# SteamOS host), frametop.flatpak (Frametop's Python runtime, a Flatpak bundle), and
+# frametop-release.json (version, commit, both files' sha256, the Flatpak's app and runtime,
+# and the SteamOS table). Nothing builds on the headset. The one download left is KDE's
+# runtime for the Flatpak (about 1 GB, from Flathub), when it isn't installed yet.
 #
 # 1. It checks this SteamOS build against the SteamOS table: Frametop's newest from GitHub
 #    (pack/steamos.json on main) when it can get it, else the one in the release. Tested: on.
 #    Not tested yet: it says so and asks (--yes goes on). Broken for this release: it stops,
 #    and names the release that fixes it (--any-steamos goes on anyway).
-# 2. It checks the image file's sha256, and loads it into podman as localhost/frametop:VERSION.
-# 3. It copies the release's files out of the image to ~/.local/share/frametop/releases/VERSION
-#    and runs their install.sh, which makes the release's container and builds nothing.
-# 4. The release installed before stays: running its install.sh goes back to it. Older ones
-#    are removed, with their containers and images.
+# 2. It checks both files' sha256, unpacks the tree to
+#    ~/.local/share/frametop/releases/VERSION, puts the bundle in it, and runs its install.sh,
+#    which installs the Flatpak and the host side, and builds nothing.
+# 3. The release installed before stays: running its install.sh goes back to it. Older ones
+#    are removed.
 #
 # Usage: install-release.sh [--yes] [--any-steamos] [--unpack-only] [--dir DIR]
 #                           [--no-eye-tracker] [--no-bluetooth | --bluetooth]
-#   --unpack-only  stop after step 2 and the copy: don't run install.sh
+#   --unpack-only  stop after step 2's unpacking: don't run install.sh
 #   --dir DIR      where the releases go (default ~/.local/share/frametop/releases)
 # The rest go to install.sh. FRAMETOP_STEAMOS_TABLE names another table to fetch (a URL), or
-# "none" to use only the release's. Exit status 3: the image file is damaged.
+# "none" to use only the release's. Exit status 3: a file is damaged.
 set -euo pipefail
 
 here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 TABLE_URL=${FRAMETOP_STEAMOS_TABLE:-https://raw.githubusercontent.com/Frametop/frametop/main/pack/steamos.json}
 
 # check_release RELEASE_JSON TABLE_JSON BUILD_ID: is the release usable, and is it for this
-# SteamOS build? Prints seven lines: status (tested, untested, or broken), version, commit,
-# channel, the image file's sha256, the image's ID, and a note for the user.
+# SteamOS build? Prints eight lines: status (tested, untested, or broken), version, commit,
+# channel, the tree's sha256, the bundle's sha256, the Flatpak's app id, and a note for the user.
 check_release() {
   python3 - "$@" <<'EOF'
 import json, re, sys
@@ -42,15 +44,19 @@ try:
         r = json.load(f)
 except (OSError, ValueError) as e:
     fail(str(e))
-if not isinstance(r, dict) or r.get("schema") != "frametop.release/v1":
-    fail("not frametop.release/v1")
-image = r.get("image") if isinstance(r.get("image"), dict) else {}
+if not isinstance(r, dict) or r.get("schema") != "frametop.release/v2":
+    fail("not frametop.release/v2 (an older release's zip? its own install-release.sh installs it)")
+tree = r.get("tree") if isinstance(r.get("tree"), dict) else {}
+flatpak = r.get("flatpak") if isinstance(r.get("flatpak"), dict) else {}
 fields = {
     "version": (r.get("version"), r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}"),
     "commit": (r.get("commit"), r"[0-9a-f]{7,40}"),
     "channel": (r.get("channel", ""), r"(stable|experimental|)"),
-    "image sha256": (image.get("sha256"), r"[0-9a-f]{64}"),
-    "image id": (image.get("id"), r"[0-9a-f]{64}"),
+    "tree file": (tree.get("file"), r"frametop-tree\.tar\.zst"),
+    "tree sha256": (tree.get("sha256"), r"[0-9a-f]{64}"),
+    "flatpak file": (flatpak.get("file"), r"frametop\.flatpak"),
+    "flatpak sha256": (flatpak.get("sha256"), r"[0-9a-f]{64}"),
+    "flatpak app": (flatpak.get("app"), r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*){2,}"),
 }
 for name, (value, pattern) in fields.items():
     if not isinstance(value, str) or not re.fullmatch(pattern, value):
@@ -95,7 +101,7 @@ else:
     others = entries("tested")[-3:]
     note = ("tested on " + ", ".join(f"SteamOS {e.get('version', '?')} (build {e.get('build', '?')})"
                                      for e in others)) if others else "not tested on any SteamOS build yet"
-for line in (status, version, r["commit"], r["channel"], image["sha256"], image["id"], oneline(note)):
+for line in (status, version, r["commit"], r["channel"], tree["sha256"], flatpak["sha256"], flatpak["app"], oneline(note)):
     print(line)
 EOF
 }
@@ -110,7 +116,7 @@ main() {
       --unpack-only) unpack_only=1 ;;
       --dir) base=${2:?--dir needs a folder}; shift ;;
       --no-eye-tracker|--no-bluetooth|--bluetooth) pass+=("$1") ;;
-      -h|--help) sed -n '2,23p' "$0"; return 0 ;;
+      -h|--help) sed -n '2,25p' "$0"; return 0 ;;
       *) echo "unknown option: $1" >&2; return 2 ;;
     esac
     shift
@@ -120,26 +126,26 @@ main() {
     echo "Frametop installs on a Steam Frame (SteamOS, VR variant)." >&2
     return 1
   fi
-  for f in frametop-release.json frametop-image.tar; do
+  for f in frametop-release.json frametop-tree.tar.zst frametop.flatpak; do
     [ -f "$here/$f" ] || { echo "$here/$f is missing: unpack the whole Frametop.zip" >&2; return 1; }
   done
   { : </dev/tty; } 2>/dev/null && tty=1
-  # podman's, even from a terminal in a VR desktop (its session has its own)
+  # flatpak's, even from a terminal in a VR desktop (its session has its own)
   export XDG_RUNTIME_DIR=/run/user/$(id -u)
   export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 
-  local build osver tmp status version commit channel sha id note
+  local build osver tmp status version commit channel tree_sha flatpak_sha app note
   build=$(sed -n 's/^BUILD_ID=//p' /etc/os-release | tr -d '"')
   osver=$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"')
   tmp=$(mktemp)
   if [ "$TABLE_URL" = none ] || ! curl -fsS --max-time 8 --proto '=https' "$TABLE_URL" -o "$tmp" 2>/dev/null; then
     : >"$tmp"  # offline: the release's own table
   fi
-  { read -r status; read -r version; read -r commit; read -r channel; read -r sha; read -r id; read -r note; } \
+  { read -r status; read -r version; read -r commit; read -r channel; read -r tree_sha; read -r flatpak_sha; read -r app; read -r note; } \
     < <(check_release "$here/frametop-release.json" "$([ -s "$tmp" ] && echo "$tmp")" "$build") ||
     { rm -f "$tmp"; return 1; }
   rm -f "$tmp"
-  [ -n "${id:-}" ] || return 1
+  [ -n "${app:-}" ] || return 1
 
   case $status in
     tested) echo "Frametop $version: tested on this SteamOS ($osver, build $build)" ;;
@@ -160,44 +166,38 @@ main() {
       fi ;;
   esac
 
-  local image=localhost/frametop:$version box=frametop-${id:0:12} dest=$base/$version
-  if [ -f "$dest/.frametop-release" ] && ! grep -qxF "IMAGE_ID=$id" "$dest/.frametop-release"; then
+  local dest=$base/$version
+  if [ -f "$dest/.frametop-release" ] && ! grep -qxF "TREE_SHA256=$tree_sha" "$dest/.frametop-release"; then
     echo "$dest holds another build of Frametop $version. Move it away, then run this again." >&2
     return 1
   fi
 
-  printf '\n\033[1m== 0/10 loading Frametop %s (a minute or two)\033[0m\n' "$version"
-  if [ "$(podman image inspect -f '{{.Id}}' "$image" 2>/dev/null)" = "$id" ]; then
-    echo "already loaded"
+  printf '\n\033[1m== 0/9 unpacking Frametop %s\033[0m\n' "$version"
+  if [ -f "$dest/.frametop-release" ]; then
+    echo "already unpacked"
   else
     local free
     free=$(df -P -BG "$HOME" | awk 'NR == 2 { sub("G", "", $4); print $4 }')
-    if [ "${free:-0}" -lt 5 ]; then
-      echo "Only ${free:-0} GB free in your home folder; Frametop needs about 4 GB. Free some space first." >&2
+    if [ "${free:-0}" -lt 3 ]; then
+      echo "Only ${free:-0} GB free in your home folder; Frametop needs about 2 GB. Free some space first." >&2
       return 1
     fi
-    echo "checking the image file"
-    echo "$sha  $here/frametop-image.tar" | sha256sum -c --status ||
-      { echo "frametop-image.tar is damaged (its sha256 doesn't match): download Frametop.zip again" >&2; return 3; }
-    podman load -q -i "$here/frametop-image.tar" >/dev/null
-    podman image exists "$id" ||
-      { echo "the image file didn't load as the image frametop-release.json names" >&2; return 1; }
-    podman tag "$id" "$image"
-  fi
-
-  if [ ! -f "$dest/.frametop-release" ]; then
-    echo "copying the release's files to $dest"
+    echo "checking the files"
+    echo "$tree_sha  $here/frametop-tree.tar.zst" | sha256sum -c --status ||
+      { echo "frametop-tree.tar.zst is damaged (its sha256 doesn't match): download Frametop.zip again" >&2; return 3; }
+    echo "$flatpak_sha  $here/frametop.flatpak" | sha256sum -c --status ||
+      { echo "frametop.flatpak is damaged (its sha256 doesn't match): download Frametop.zip again" >&2; return 3; }
+    echo "unpacking to $dest"
     mkdir -p "$base"
     rm -rf "$dest.new"
     mkdir "$dest.new"
-    local copied=0
-    podman rm -f "frametop-copy-$$" >/dev/null 2>&1 || true
-    podman create --name "frametop-copy-$$" "$image" true >/dev/null &&
-      podman cp "frametop-copy-$$:/src/frametop/." "$dest.new/" || copied=1
-    podman rm -f "frametop-copy-$$" >/dev/null 2>&1 || true
-    [ "$copied" = 0 ] || { rm -rf "$dest.new"; echo "couldn't copy the release's files out of its image" >&2; return 1; }
-    printf 'VERSION=%s\nCOMMIT=%s\nCHANNEL=%s\nIMAGE=%s\nIMAGE_ID=%s\nBOX=%s\n' \
-      "$version" "$commit" "$channel" "$image" "$id" "$box" >"$dest.new/.frametop-release"
+    tar --zstd -xf "$here/frametop-tree.tar.zst" -C "$dest.new" ||
+      { rm -rf "$dest.new"; echo "frametop-tree.tar.zst didn't unpack" >&2; return 3; }
+    [ -x "$dest.new/install.sh" ] || { rm -rf "$dest.new"; echo "the tree has no install.sh" >&2; return 1; }
+    mkdir -p "$dest.new/pack/flatpak/build"
+    cp "$here/frametop.flatpak" "$dest.new/pack/flatpak/build/frametop.flatpak"
+    printf 'VERSION=%s\nCOMMIT=%s\nCHANNEL=%s\nTREE_SHA256=%s\nFLATPAK=%s\nFLATPAK_SHA256=%s\n' \
+      "$version" "$commit" "$channel" "$tree_sha" "$app" "$flatpak_sha" >"$dest.new/.frametop-release"
     mv "$dest.new" "$dest"
   fi
   echo "Frametop $version (${commit:0:7}) in $dest"
@@ -212,8 +212,9 @@ main() {
     "$dest/install.sh" ${pass[@]+"${pass[@]}"} </dev/null
   fi
 
-  # This release is now "current"; the one before stays, to go back to. Older ones go, with
-  # their containers and images (only Frametop's: frametop-... and localhost/frametop:...).
+  # This release is now "current"; the one before stays, to go back to. Older ones go. A release
+  # from before the Flatpak ran in a container of its own, named in its .frametop-release:
+  # that goes with it, with its image (only Frametop's: frametop-... and localhost/frametop:...).
   local prev= d old_image old_box
   [ -L "$base/current" ] && prev=$(readlink "$base/current")
   ln -sfn "$version" "$base/current"
@@ -225,8 +226,10 @@ main() {
     old_image=$(sed -n 's/^IMAGE=//p' "$d/.frametop-release")
     old_box=$(sed -n 's/^BOX=//p' "$d/.frametop-release")
     echo "removing Frametop ${d##*/}, two releases back"
-    if [[ $old_box =~ ^frametop-[A-Za-z0-9_.-]+$ ]]; then podman rm -f "$old_box" >/dev/null 2>&1 || true; fi
-    if [[ $old_image == localhost/frametop:* ]]; then podman rmi "$old_image" >/dev/null 2>&1 || true; fi
+    if command -v podman >/dev/null; then
+      if [[ $old_box =~ ^frametop-[A-Za-z0-9_.-]+$ ]]; then podman rm -f "$old_box" >/dev/null 2>&1 || true; fi
+      if [[ $old_image == localhost/frametop:* ]]; then podman rmi "$old_image" >/dev/null 2>&1 || true; fi
+    fi
     rm -rf "$d"
   done
 }

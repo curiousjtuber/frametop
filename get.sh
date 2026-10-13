@@ -7,7 +7,7 @@
 # It asks which version to install, clones the repo into ~/frametop (or updates the clone
 # that's there), and runs its install.sh. Run it again to update, or to switch versions.
 # Its third and fourth choices, or --release, install a release instead: Frametop built, in one file. It downloads the
-# release's Frametop.zip from GitHub (about 1.1 GB: the newest stable release, or with
+# release's Frametop.zip from GitHub (a few hundred MB: the newest stable release, or with
 # --experimental the newest of any), unpacks it in ~/.cache/frametop/release, and runs its
 # install-release.sh, which checks this SteamOS build against the releases' SteamOS table and
 # installs without building anything (pack/README.md, Releases). The same zip installs with
@@ -87,7 +87,7 @@ install_release() {
       file=$cache/Frametop-$key.zip
       find "$cache" -maxdepth 1 -name 'Frametop-*.zip*' ! -name "Frametop-$key.zip*" -delete
       if [ ! -f "$file" ]; then
-        echo "Downloading $url (about 1.1 GB; if it stops, run this again to resume)"
+        echo "Downloading $url (a few hundred MB; if it stops, run this again to resume)"
         curl -fL --proto '=https' -C - -o "$file.part" "$url" ||
           { echo "the download didn't finish: run this again to resume it" >&2; return 1; }
         mv "$file.part" "$file"
@@ -108,7 +108,7 @@ install_release() {
     rm -f "$file"  # damaged: the next run downloads it again
   fi
   [ "$status" = 0 ] || return "$status"
-  # Loaded into podman and copied out: the download isn't needed any more.
+  # Unpacked into the releases folder: the download isn't needed any more.
   [ "$clone_only" = 1 ] || rm -rf "$cache"
 }
 
@@ -181,8 +181,8 @@ main() {
       echo "  1) stable: the main branch, tested releases"
       echo "  2) experimental: the newest features, less tested"
       if [ "$release" = 0 ]; then
-        echo "  3) stable release: built, nothing to compile (a 1.1 GB download)"
-        echo "  4) experimental release: built, nothing to compile (a 1.1 GB download)"
+        echo "  3) stable release: built, nothing to compile (a few hundred MB download)"
+        echo "  4) experimental release: built, nothing to compile (a few hundred MB download)"
       fi
       [ -n "$current" ] && echo "(installed now: $current)"
       read -r -p "Choose 1$([ "$release" = 0 ] && echo ", 2, 3, or 4" || echo " or 2") [$([ "$def" = main ] && echo 1 || echo 2)]: " \

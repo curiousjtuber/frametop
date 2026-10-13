@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Offline test of a release's SteamOS check and its frametop-release.json: install-release.sh's
 check_release (the script without its last line, which would install), on files
-pack/release-info.py writes from a small made-up OCI archive. No network, podman, or install.
+pack/release-info.py writes from small made-up tree and bundle files. No network, flatpak, or
+install.
 
   pack/test/release-test.py
 """
 import hashlib
-import io
 import json
 import os
 import subprocess
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
 
@@ -39,91 +38,80 @@ def write(name, obj):
     return path
 
 
-def oci_archive(path, config=b'{"architecture":"arm64"}'):
-    """An OCI archive with one image: index.json -> manifest -> config."""
-    def digest(b):
-        return hashlib.sha256(b).hexdigest()
-    manifest = json.dumps({"schemaVersion": 2, "config": {"digest": "sha256:" + digest(config)}, "layers": []}).encode()
-    index = json.dumps({"schemaVersion": 2, "manifests": [{"digest": "sha256:" + digest(manifest)}]}).encode()
-    with tarfile.open(path, "w") as tar:
-        for name, data in (("index.json", index), (f"blobs/sha256/{digest(manifest)}", manifest),
-                           (f"blobs/sha256/{digest(config)}", config)):
-            info = tarfile.TarInfo(name)
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-    return digest(config)
-
-
 def info(version, steamos, *extra):
     table = write("steamos.json", steamos)
-    r = subprocess.run([sys.executable, os.path.join(REPO, "pack", "release-info.py"), "--image-file", IMAGE,
-                        "--version", version, "--commit", "1234567", "--steamos", table, *extra],
+    r = subprocess.run([sys.executable, os.path.join(REPO, "pack", "release-info.py"), "--tree-file", TREE,
+                        "--flatpak-file", BUNDLE, "--version", version, "--commit", "1234567", "--steamos", table,
+                        *extra], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"release-info.py failed: {r.stderr}")
+    return json.loads(r.stdout)
+
+
+def check_release(release, table, build):
+    """check_release's lines, or the error line with status 'error'."""
+    rel = write("frametop-release.json", release)
+    tab = write("table.json", table) if table is not None else ""
+    r = subprocess.run(["bash", "-c", SCRIPT + f'\ncheck_release "$@"', "--", rel, tab, build],
                        capture_output=True, text=True)
-    return r.returncode, r.stdout
+    if r.returncode != 0:
+        return ["error", r.stderr.strip()]
+    return r.stdout.rstrip("\n").split("\n")
 
 
-def pick(release, build, live=""):
-    r = subprocess.run(["bash", "-c", SCRIPT + '\ncheck_release "$@"', "install-release.sh", release, live, build],
-                       capture_output=True, text=True)
-    return r.returncode, r.stdout.splitlines()
+TREE = os.path.join(TMP, "frametop-tree.tar.zst")
+BUNDLE = os.path.join(TMP, "frametop.flatpak")
+Path(TREE).write_bytes(b"not really a tar, but a file with a sha256\n")
+Path(BUNDLE).write_bytes(b"not really a bundle\n")
+TREE_SHA = hashlib.sha256(Path(TREE).read_bytes()).hexdigest()
+BUNDLE_SHA = hashlib.sha256(Path(BUNDLE).read_bytes()).hexdigest()
+TESTED = {"tested": [{"build": OURS, "version": "0.4.5"}], "broken": []}
 
+# --- release-info.py
+rel = info("0.3.0", TESTED)
+check("release-info.py writes the v2 schema", rel["schema"], "frametop.release/v2")
+check("with both files' sha256", (rel["tree"]["sha256"], rel["flatpak"]["sha256"]), (TREE_SHA, BUNDLE_SHA))
+check("and the file names", (rel["tree"]["file"], rel["flatpak"]["file"]), ("frametop-tree.tar.zst", "frametop.flatpak"))
+check("and the Flatpak's app and runtime from the manifest",
+      (rel["flatpak"]["app"], rel["flatpak"]["runtime"].split("//")[0]), ("io.github.frametop.Frametop", "org.kde.Platform"))
+check("stable for a plain version", rel["channel"], "stable")
+check("experimental for a prerelease", info("0.3.0-exp.1", TESTED)["channel"], "experimental")
+check("--channel wins", info("0.3.0-exp.1", TESTED, "--channel", "stable")["channel"], "stable")
+check("the SteamOS table comes along", rel["steamos"]["tested"][0]["build"], OURS)
 
-IMAGE = os.path.join(TMP, "frametop-image.tar")
-ID = oci_archive(IMAGE)
-SHA = hashlib.sha256(Path(IMAGE).read_bytes()).hexdigest()
-tested = [{"build": OURS, "version": "0.3.0", "steamvr": "2.17.10"}]
+# --- check_release: the SteamOS table
+out = check_release(rel, None, OURS)
+check("tested on this build, from the release's own table", out[0], "tested")
+check("and the sha256s, the app and the version come through", (out[1], out[4], out[5], out[6]),
+      ("0.3.0", TREE_SHA, BUNDLE_SHA, "io.github.frametop.Frametop"))
+out = check_release(rel, None, NEW)
+check("untested on a build in no table", out[0], "untested")
+check("names what it was tested on", "0.4.5" in out[7] and OURS in out[7], True)
+newer = {"tested": [{"build": OURS, "version": "0.4.5"}, {"build": NEW, "version": "0.4.6"}], "broken": []}
+check("Frametop's newer table counts when it was fetched", check_release(rel, newer, NEW)[0], "tested")
+check("a fetched table that isn't one is ignored", check_release(rel, {"nope": 1}, OURS)[0], "tested")
 
-code, out = info("0.3.0", {"tested": tested, "broken": []})
-check("release-info.py writes it", code, 0)
-rel = json.loads(out)
-check("with the image file's sha256 and the image's ID", (rel["image"]["sha256"], rel["image"]["id"]), (SHA, ID))
-check("a version without a \"-\" is stable", rel["channel"], "stable")
-check("an experimental one", json.loads(info("0.3.0-exp.1", {"tested": tested})[1])["channel"], "experimental")
-check("release-info.py refuses a malformed version", info("../0.3", {"tested": tested})[0], 2)
-two = os.path.join(TMP, "two.tar")
-with tarfile.open(two, "w") as tar:
-    data = json.dumps({"manifests": [{"digest": "sha256:a"}, {"digest": "sha256:b"}]}).encode()
-    t = tarfile.TarInfo("index.json")
-    t.size = len(data)
-    tar.addfile(t, io.BytesIO(data))
-r = subprocess.run([sys.executable, os.path.join(REPO, "pack", "release-info.py"), "--image-file", two,
-                    "--version", "1.0", "--commit", "1234567"], capture_output=True, text=True)
-check("and an archive with two images", r.returncode != 0, True)
+broken = {"tested": [], "broken": [{"build": NEW, "reason": "KWin 6.3 moved the outputs", "from": "0.3.0", "fixed_in": "0.3.2"}]}
+out = check_release(rel, broken, NEW)
+check("broken on a build the table marks", out[0], "broken")
+check("with the reason and the fix", "KWin 6.3" in out[7] and "0.3.2" in out[7], True)
+check("a release before 'from' isn't broken by it", check_release(info("0.2.9", TESTED), broken, NEW)[0], "untested")
+check("nor one from 'fixed_in' on", check_release(info("0.3.2", TESTED), broken, NEW)[0], "untested")
+check("an experimental release counts as the release it leads to",
+      check_release(info("0.3.1-exp.2", TESTED), broken, NEW)[0], "broken")
 
-stable = write("stable.json", out)
-code, out = pick(stable, OURS)
-check("a tested build: tested", (code, out[0], out[1]), (0, "tested", "0.3.0"))
-check("and the image's sha256 and ID come through", out[4:6], [SHA, ID])
-code, out = pick(stable, NEW)
-check("a build in no table: untested", out[0], "untested")
-check("which says where it was tested", out[6], "tested on SteamOS 0.3.0 (build 20260922.6101926)")
+# --- check_release: a release that isn't usable
+for label, bad in (("an older schema", {"schema": "frametop.release/v1"}),
+                   ("a version that isn't one", {"version": "../x"}),
+                   ("a tree sha256 that isn't one", {"tree": {"file": "frametop-tree.tar.zst", "sha256": "latest"}}),
+                   ("no flatpak app", {"flatpak": {"file": "frametop.flatpak", "sha256": BUNDLE_SHA}}),
+                   ("a flatpak app that isn't an id", {"flatpak": {"file": "frametop.flatpak", "sha256": BUNDLE_SHA, "app": "rm -rf"}})):
+    r = dict(rel, **bad)
+    check(f"refuses {label}", check_release(r, None, OURS)[0], "error")
+check("refuses a file that isn't JSON", check_release("{", None, OURS)[0], "error")
 
-broken = {"tested": tested, "broken": [{"build": NEW, "reason": "the 3D mouse\nhas no laser", "fixed_in": "0.3.1"}]}
-code, out = pick(write("b.json", info("0.3.0", broken)[1]), NEW)
-check("a build broken for this release: broken", out[0], "broken")
-check("with the reason on one line, and the fix", out[6], "the 3D mouse has no laser (fixed in Frametop 0.3.1)")
-code, out = pick(write("b2.json", info("0.3.1-exp.2", broken)[1]), NEW)
-check("the release with the fix isn't broken there", out[0], "untested")
-
-needs = {"tested": tested, "broken": [{"build": OURS, "reason": "needs SteamVR 2.18", "from": "0.4.0"}]}
-check("a break from a later release doesn't count for this one", pick(write("n1.json", info("0.3.0", needs)[1]), OURS)[1][0],
-      "tested")
-check("it counts from that release on, over tested", pick(write("n2.json", info("0.4.0", needs)[1]), OURS)[1][0], "broken")
-
-live = write("live.json", {"tested": tested + [{"build": NEW, "version": "0.5.5"}], "broken": []})
-check("the newest table from GitHub counts over the release's", pick(stable, NEW, live)[1][0], "tested")
-check("a table that isn't one is ignored", pick(stable, NEW, write("junk.json", "<html>"))[1][0], "untested")
-live_broken = write("live-broken.json", {"tested": tested, "broken": [{"build": OURS, "reason": "x", "fixed_in": "0.3.1"}]})
-check("and it can say a build broke after the release came out", pick(stable, OURS, live_broken)[1][0], "broken")
-
-good = json.loads(Path(stable).read_text())
-for label, change in (("a version with a slash", {"version": "../1.0"}),
-                      ("a commit that isn't hex", {"commit": "$(reboot)"}),
-                      ("an image ID that isn't one", {"image": {"sha256": SHA, "id": "latest"}}),
-                      ("no image sha256", {"image": {"id": ID}}),
-                      ("another schema", {"schema": "frametop.release/v0"})):
-    check(f"a release file with {label} fails", pick(write("bad.json", {**good, **change}), OURS), (1, []))
-check("a release file that isn't JSON fails", pick(write("notjson.json", "{"), OURS), (1, []))
-
-print("FAILED: " + ", ".join(failures) if failures else "all passed", flush=True)
-sys.exit(1 if failures else 0)
+print()
+if failures:
+    print(f"{len(failures)} FAILED")
+    sys.exit(1)
+print("all ok")

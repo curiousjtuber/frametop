@@ -3,7 +3,7 @@
 # FrameDrop puts in the Steam library, or what you run after unpacking the zip on the headset.
 # It opens the install window (progress.py), which asks what to install, and your password
 # for the parts that need sudo, then installs Frametop (or updates it) in a service of its own
-# and shows its progress. A release's zip installs its own image, built
+# and shows its progress. A release's zip installs its built tree and Python runtime
 # (install-release.sh); a test zip clones Frametop from GitHub (get.sh).
 #
 # Usage: frametop-install.sh [--dry-run]

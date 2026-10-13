@@ -5,8 +5,9 @@
 
 The Flatpak (io.github.frametop.Frametop.yml) is the Python runtime for the apps that need
 more than the host's python3: the settings apps' PySide6 and the trackers' numpy and OpenCV
-(pack/host-and-flatpak.md). uv.lock pins them, with every wheel's sha256, so the module this
-writes is the lock's apps and tracker groups, closed over their dependencies for the runtime
+(pack/host-and-flatpak.md), and pytest, for the suites that need KDE. uv.lock pins them, with
+every wheel's sha256, so the module this writes is the lock's apps and tracker groups (and
+pytest from dev), closed over their dependencies for the runtime
 (Python 3.13 on aarch64 Linux), each as the one wheel pip will install there, fetched by
 flatpak-builder and checked. pyproject.toml and `uv lock` are the only places versions change.
 --list prints the packages and wheels instead.
@@ -21,6 +22,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LOCK = HERE.parent.parent / "uv.lock"
 GROUPS = ("apps", "tracker")
+# From the dev group, the test runner alone: the suites that need KDE (kwriteconfig6, PySide6)
+# run in the Flatpak, in CI and by hand (release.yml), not in the build image.
+DEV_PACKAGES = ("pytest",)
 # What the KDE 6.11 runtime is (pack/flatpak/io.github.frametop.Frametop.yml): the markers in
 # the lock are evaluated for it, and the wheels chosen for it.
 PYTHON = "3.13"
@@ -92,6 +96,9 @@ def closure(lock):
     want, todo = {}, []
     for group in GROUPS:
         for dep in root.get("dev-dependencies", {}).get(group, []):
+            todo.append(dep)
+    for dep in root.get("dev-dependencies", {}).get("dev", []):
+        if dep["name"] in DEV_PACKAGES:
             todo.append(dep)
     while todo:
         dep = todo.pop()

@@ -37,9 +37,9 @@ else
 fi
 FRAME_HOST=${FRAME_HOST:-frame}
 FRAME_BOX=${FRAME_BOX:-dev}
-# FRAME_RELEASE=1: this tree is a release (get.sh --release), copied out of its image with its
-# programs built, and its .frametop-release names the image and the container they run in
-# (scripts/in-box). It never builds: installers skip the build steps.
+# FRAME_RELEASE=1: this tree is a release (get.sh --release), unpacked with its programs built
+# for the host and its Python runtime's Flatpak bundle beside them (.frametop-release names
+# the version and the bundle). It never builds: installers skip the build steps.
 FRAME_RELEASE=0
 [ -f "$REPO_ROOT/.frametop-release" ] && FRAME_RELEASE=1
 

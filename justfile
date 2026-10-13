@@ -11,19 +11,22 @@ default:
 test: test-python test-c test-bash
 
 # the Python suites as a strict gate: every failure fails the run. The image's
-# python3 has to import the dnf Qt stack and the locked packages together;
-# without that check the Qt tests would only skip. session/test is not here:
-# test_accessibility.py needs the host's AT-SPI and PyGObject.
+# python3 is the venv's, with the locked numpy and OpenCV; without that check
+# the tracker tests would only skip. The suites that need KDE (session/tests
+# uses kwriteconfig6, the recorder's QML test PySide6) run in the Flatpak,
+# Frametop's Python runtime, which has pytest for them (release.yml, and by
+# hand: scripts/ft-python -m is not a thing, so
+# flatpak run --command=python3 io.github.frametop.Frametop -m pytest ...).
+# session/test is nowhere: test_accessibility.py needs the host's AT-SPI.
 test-python:
     #!/usr/bin/env bash
     set -uo pipefail
-    python3 -c 'import PySide6, numpy, cv2' || { echo "python3 can't import PySide6, numpy, and cv2"; exit 1; }
+    python3 -c 'import numpy, cv2' || { echo "python3 can't import numpy and cv2"; exit 1; }
     status=0
     for t in input/test/*.py hands/tests/test_*.py hands/rec/tests/*.py gaze/test/*.py pack/test/*.py; do
         [ -f "$t" ] || continue
         if python3 "$t" >/dev/null; then echo "$t: ok"; else echo "$t: FAILED"; status=1; fi
     done
-    pytest -q session/tests || status=1
     exit $status
 
 # the C/C++ unit tests that need no model runtime: header-only logic with

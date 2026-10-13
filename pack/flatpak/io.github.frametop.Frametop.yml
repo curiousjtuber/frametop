@@ -1,7 +1,8 @@
 # Frametop's Python runtime, as a Flatpak (pack/host-and-flatpak.md): KDE's runtime (Qt,
 # Kirigami, the org.kde.desktop style, Breeze, zstd), PySide6 of the runtime's Qt minor, and
-# the trackers' numpy and OpenCV, from uv.lock (build/python-packages.json, written by
-# modules.py). It holds none of Frametop's code: scripts/ft-python runs the repo's .py files in
+# the trackers' numpy and OpenCV, and pytest for the suites that need KDE, from uv.lock
+# (build/python-packages.json, written by modules.py). It holds none of Frametop's code:
+# scripts/ft-python runs the repo's .py files in
 # it, with the repo mounted read-only, so the settings apps, the Hand Recorder and ft-eyes
 # are edited and run like any script, and this is rebuilt only when uv.lock changes.
 # pack/flatpak/build.sh builds it (flatpak-builder) into a bundle, build/frametop.flatpak;

@@ -1,17 +1,17 @@
-# Build Frametop's release on Depot's arm64 runners (the Frame is aarch64): the image from
-# pack/Containerfile, the test gate inside it, then Frametop.zip (framedrop/build.sh), the
-# image with its installer: FrameDrop installs it from a PC, or you unpack it on the headset
-# and run Frametop/frametop-install.sh, or get.sh --release downloads it (pack/README.md,
-# Releases). It's about 1.1 GB, under GitHub's 2 GB a file.
+# Build Frametop's release on Depot's arm64 runners (the Frame is aarch64): the build image
+# from pack/Containerfile, the test gate inside it, the built tree copied out of it, the
+# Python runtime Flatpak (pack/flatpak/build.sh, on the runner), then Frametop.zip
+# (framedrop/build.sh): the tree, the bundle and the installer. FrameDrop installs it from a
+# PC, or you unpack it on the headset and run Frametop/frametop-install.sh, or get.sh
+# --release downloads it (pack/README.md, Releases). A few hundred MB.
 #
 # A v* tag makes a draft GitHub release with the zip, its FrameDrop manifest, its
-# frametop-release.json, and SHA256SUMS (a prerelease when the tag has a "-", like
-# v0.3.0-exp.1). Nothing is public until someone publishes the draft. A manual run keeps the
-# zip as the run's artifact for a week.
+# frametop-release.json, the Flatpak bundle on its own, and SHA256SUMS (a prerelease when the
+# tag has a "-", like v0.3.0-exp.1). Nothing is public until someone publishes the draft. A
+# manual run keeps the zip as the run's artifact for a week.
 #
-# podman, as on the Frame: the zip holds podman save's archive, which the headset loads with
-# podman. Not on pushes or pull requests: Depot's runners are paid, and a fork's pull request
-# would run on them. Actions are pinned to commit SHAs (the version in the comment).
+# Not on pushes or pull requests: Depot's runners are paid, and a fork's pull request would
+# run on them. Actions are pinned to commit SHAs (the version in the comment).
 name: release
 
 on:
@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 90
     env:
       FT_ENGINE: podman
+      APP: io.github.frametop.Frametop
     steps:
       # actions/checkout@v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -45,21 +46,52 @@ jobs:
         run: ./ft dev build
 
       # The unit gate: Python (strict), C, and shell, inside the image, so what passes here is
-      # what the zip installs.
+      # what the zip installs. The Qt suites run in the Flatpak, below.
       - name: test (python, c, bash)
         run: ./ft dev test
 
-      - name: smoke (what a release installs from the image)
+      - name: the built tree (what a release ships)
         run: |
-          podman run --rm --entrypoint sh "$FT_IMAGE" -c '
-            set -e
-            for p in ft-screens ft-pointer ft-powerd ft-gaze ft-gazepanel ft-stream ft-eyegrab; do
-              test -x /opt/frametop/bin/$p
-            done
-            test -f /src/frametop/pointer/driver/build/driver_ft_pointer.so
-            test -x /src/frametop/pack/build/distrobox/install
-            /src/frametop/gaze/tracker/build/venv/bin/python -c "import numpy, cv2"
-            python3 -c "import PySide6"'
+          podman create --name tree "$FT_IMAGE" true >/dev/null
+          mkdir -p out
+          podman cp tree:/src/frametop out/tree
+          podman rm tree >/dev/null
+          cd out/tree
+          for p in screens/build/ft-screens pointer/helper/build/ft-pointer power/build/ft-powerd \
+                   gaze/build/ft-gaze gaze/build/ft-gazepanel stream/build/ft-stream gaze/tracker/build/ft-eyegrab; do
+            test -x "$p"
+          done
+          test -f pointer/driver/build/driver_ft_pointer.so
+          . scripts/host-glibc.sh
+          host_glibc_check screens/build/ft-screens pointer/helper/build/ft-pointer power/build/ft-powerd \
+            gaze/build/ft-gaze gaze/build/ft-gazepanel stream/build/ft-stream gaze/tracker/build/ft-eyegrab \
+            pointer/driver/build/driver_ft_pointer.so
+          du -sh .
+
+      # The Python runtime: flatpak-builder on the runner (bubblewrap needs unprivileged user
+      # namespaces, which Ubuntu 24.04's AppArmor restricts by default).
+      - name: the Flatpak
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends flatpak flatpak-builder zstd
+          sudo sysctl -q kernel.apparmor_restrict_unprivileged_userns=0
+          pack/flatpak/build.sh
+          ls -la pack/flatpak/build/frametop.flatpak
+
+      # The suites that need KDE (session/tests uses kwriteconfig6, the recorder's QML test
+      # PySide6), in the runtime they ship in, with the pytest it carries for this.
+      - name: test (kde, in the flatpak)
+        run: |
+          flatpak install --user -y --noninteractive pack/flatpak/build/frametop.flatpak >/dev/null
+          run() { QT_QPA_PLATFORM=offscreen flatpak run --user --filesystem="$PWD:ro" --command=python3 "$APP" "$@"; }
+          status=0
+          run -m pytest -q -p no:cacheprovider "$PWD/session/tests" || status=1
+          if run "$PWD/hands/rec/tests/test_qml_backend.py" >/dev/null; then
+            echo "hands/rec/tests/test_qml_backend.py: ok"
+          else
+            echo "hands/rec/tests/test_qml_backend.py: FAILED"; status=1
+          fi
+          exit $status
 
       # The FrameDrop manifest names the zip's URL in this repo's release (a fork's, in a fork).
       - name: Frametop.zip
@@ -67,7 +99,8 @@ jobs:
           url=()
           [ "$GITHUB_REF_TYPE" = tag ] &&
             url=("https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/Frametop.zip")
-          framedrop/build.sh --image "$FT_IMAGE" --version "$VERSION" --commit "$GITHUB_SHA" "${url[@]}"
+          framedrop/build.sh --tree out/tree --flatpak pack/flatpak/build/frametop.flatpak \
+            --version "$VERSION" --commit "$GITHUB_SHA" "${url[@]}"
 
       - name: keep the zip (manual runs)
         if: github.ref_type != 'tag'
@@ -96,4 +129,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag "${pre[@]}" \
             --title "Frametop $VERSION" --notes-file "$notes" --generate-notes \
             framedrop/build/Frametop.zip framedrop/build/frametop.framedrop.json \
-            framedrop/build/frametop-release.json framedrop/build/SHA256SUMS
+            framedrop/build/frametop-release.json framedrop/build/frametop.flatpak framedrop/build/SHA256SUMS

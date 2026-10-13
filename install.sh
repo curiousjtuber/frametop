@@ -71,9 +71,14 @@ if [ "$FRAME_LOCAL" = 0 ] || [ -n "${SSH_CONNECTION:-}" ]; then
 fi
 
 step "1/9 Frametop's Python runtime (a Flatpak: the settings apps, our eye tracker's ft-eyes)"
-# A release brings its bundle in pack/flatpak/build; a checkout installs the one built for its
-# inputs, building it first when there's none (the KDE runtime is a 1 GB download, once).
-on_frame 'pack/flatpak/install.sh'
+# A release brings its bundle (pack/install-release.sh puts it in pack/flatpak/build); a
+# checkout installs the one built for its inputs, building it first when there's none (the
+# KDE runtime is a 1 GB download, once).
+if [ "$FRAME_RELEASE" = 1 ]; then
+  on_frame 'pack/flatpak/install.sh pack/flatpak/build/frametop.flatpak'
+else
+  on_frame 'pack/flatpak/install.sh'
+fi
 
 step "2/9 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
 "$root/desktops.sh" relay install
