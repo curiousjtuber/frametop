@@ -221,6 +221,11 @@ cursor_theme=$(kreadconfig6 --file kcminputrc --group Mouse --key cursorTheme)
 cursor_size=$(kreadconfig6 --file kcminputrc --group Mouse --key cursorSize)
 export XCURSOR_THEME=${cursor_theme:-breeze_cursors}
 [ -z "$cursor_size" ] || export XCURSOR_SIZE=$cursor_size
+# And drawing it: KWin puts the cursor on a hardware plane the headset's view doesn't show.
+# SteamOS 0.5.6 shows the stock desktop's, but not this desktop's (several outputs, its own
+# sizes; which of those matters isn't known), so KWin is told to draw it into the frame. Set
+# here, it reaches only this desktop's KWin; the stock desktop keeps its own cursor.
+export KWIN_FORCE_SW_CURSOR=1
 
 # Remote desktop: session/remote-desktop.sh captures the desktop with krdp and serves it
 # over RDP, and session/vnc-bridge.sh re-serves its primary screen over VNC. krdpserver runs from the container, so KWin can't
