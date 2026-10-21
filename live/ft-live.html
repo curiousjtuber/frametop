@@ -39,10 +39,6 @@
 <body>
 <h1>Frametop live view</h1>
 <div id="status">connecting…</div>
-<div class="row">
-  <div class="view"><h2>Room, from above (you are the dot; forward is up)</h2><canvas id="above" height="320"></canvas></div>
-  <div class="view"><h2>Room, from the front (x and height; panels as if facing you)</h2><canvas id="front" height="320"></canvas></div>
-</div>
 <h2>KWin's layout (logical pixels, as Display Configuration shows monitors; a floating output's margin, which VR doesn't show, is shaded)</h2>
 <div class="controls">
   <label>Place floating outputs <select id="mode">
@@ -54,6 +50,10 @@
   <span id="layoutmsg"></span>
 </div>
 <canvas id="layout" height="280"></canvas>
+<div class="row">
+  <div class="view"><h2>Room, from above (you are the dot; forward is up)</h2><canvas id="above" height="320"></canvas></div>
+  <div class="view"><h2>Room, from the front (x and height; panels as if facing you)</h2><canvas id="front" height="320"></canvas></div>
+</div>
 <h2>Panels and their windows (KWin outputs; the pointer is the red cross; the shaded margin is not shown in VR)</h2>
 <canvas id="panels" height="360"></canvas>
 <h2>Windows</h2>
