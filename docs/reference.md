@@ -196,7 +196,7 @@ On the PC, `host/windows/Setup Frametop host.cmd` sets it up for Frametop: Vibep
 
 A desktop window can float in VR as a panel of its own, away from the screens. Meta+Shift+F floats the window under the pointer (or the active one, over the wallpaper), or puts it back on its screen if it floats. So do Float in VR in every window's menu (Alt+F3; Back to Desktop on a floating one), the button left of Close in its title bar, and a mouse button, controller button, or key combination mapped to Float window in VR in Frametop Input Settings; Put all floating windows back is mappable too. Launch as Standalone, in an app's right-click menu in the Application Launcher or the taskbar, starts the app with its first window floating, where that app last floated or in front of you. [floating-windows.md](floating-windows.md) explains how it works.
 
-`float/ft-floatd` does this. It runs inside the desktop's Plasma session (log: `/tmp/frametop-floatd.log`), loads the KWin script `float/frametop-float.js`, and moves each floating window to a spare KWin output of its own, which ft-screens shows as a panel cropped to the window. The settings are in `~/.config/frametop.conf`: `FLOAT_SLOTS` is how many windows can float at once (8, at most 16; 0 turns floating off; restart the desktop after a change), and `FLOAT_MARGIN` the pixels around each window on its output, so menus have room past its edges (300). Each app's last floating place, size, and scale are kept in `~/.config/frametop-float.json` by desktop file name, relative to the primary screen, so they move with the screens. `FT_FLOAT_DEBUG=1` in ft-floatd's environment logs every event from the KWin script.
+`float/ft-floatd` does this. It runs inside the desktop's Plasma session (log: `/tmp/frametop-floatd.log`), loads the KWin script `float/frametop-float.js`, and moves each floating window to a spare KWin output of its own, which ft-screens shows as a panel cropped to the window. The settings are in `~/.config/frametop.conf`: `FLOAT_SLOTS` is how many windows can float at once (8, at most 16; 0 turns floating off; restart the desktop after a change), and `FLOAT_MARGIN` the pixels around each window on its output, so menus have room past its edges (300), and `FLOAT_LAYOUT` how the floating outputs are placed in KWin's layout, which is what a mouse that moves on its own (Deskflow's) crosses between: `row` (the default) puts them in a row right of the screens as they floated, `vr` in the order their panels are around you. Frametop Live View's layout changes it, and there an output can be dragged into place by hand. Each app's last floating place, size, and scale are kept in `~/.config/frametop-float.json` by desktop file name, relative to the primary screen, so they move with the screens. `FT_FLOAT_DEBUG=1` in ft-floatd's environment logs every event from the KWin script.
 
 With floating on, the session gives the desktop's windows Frametop's own decoration (`decoration/`): Breeze's look plus the float button. Apps that draw their own title bar, like Chromium and Electron apps, don't have the button. `decoration/apply.sh` puts a changed copy into the running desktop, and `decoration/apply.sh --off` goes back to Breeze until the next desktop start.
 
@@ -208,16 +208,18 @@ float/ft-float launch org.kde.dolphin # start an app (its desktop file name) flo
 float/ft-float run COMMAND [ARG...]   # the same for a command
 float/ft-float close ID               # close a window
 float/ft-float list                   # the spare outputs and what floats on them
+float/ft-float layout [row|vr|auto|move WL-N X Y]   # how the spares are placed in KWin's layout
 ```
 
 ## ft-live, the live view
 
 `live/ft-live` shows the desktop's arrangement as it is now, in a browser: the screens and
 floating panels in the room, from above and from the front; KWin's own layout of the outputs
-in logical pixels, as Display Configuration shows monitors; each panel's windows; and the
-pointer. A floating output's margin, the room around its window that VR never shows, is
-shaded, and a pointer there (easy with Deskflow's mouse) is drawn hollow, with the status
-line saying how far from the window it is. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
+in logical pixels, as Display Configuration shows monitors, where a floating output can be
+dragged into place and the placement mode chosen (`FLOAT_LAYOUT` above); each panel's
+windows; and the pointer. A floating output's margin, the room around its window that VR
+never shows, is shaded, and a pointer there (easy with Deskflow's mouse) is drawn hollow,
+with the status line saying how far from the window it is. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
 a KWin script it loads into the running desktop (`live/frametop-live.js`, unloaded when
 ft-live quits; it changes nothing in KWin), and which window floats where from ft-floatd.
 The page redraws ten times a second from `/state.json`, which is also there for scripts.

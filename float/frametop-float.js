@@ -210,6 +210,7 @@ workspace.screensChanged.connect(() => {
     all.forEach(w => putBack(w, screensChanged));
     takeLayout();
     all.forEach(reportMoved);
+    send({ev: "outputs"});  // ft-floatd lays the spares out again by the outputs as they are now
 });
 
 // Floating windows, and popups and dialogs on a spare output: tell ft-floatd about changes.
@@ -371,6 +372,9 @@ function run(c) {
             if (!w) break;
             expect(w, settled[c.id] ? settled[c.id].output : (w.output ? w.output.name : ""), c, w.fullScreen);
             w.frameGeometry = {x: c.x, y: c.y, width: c.w, height: c.h};
+            break;
+        case "settle":  // where the window will be once ft-floatd moves its output: nothing moves now
+            if (w) expect(w, c.output, c, w.fullScreen);
             break;
         case "close":
             if (w) w.closeWindow();

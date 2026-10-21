@@ -20,11 +20,25 @@ command-line side). Replies go to the sender:
   dock N | close N | resize N W H | scale N STEPS                      (ft-screens, N = its screen)
   front N   (ft-screens: a spin brought panel N to the front: make its window, or the top one
             on a screen, KWin's active window)
+  layout   (-> "ok" + JSON: the placement mode and the outputs placed by hand)
+  layout row | vr   (the placement mode, kept in frametop.conf; lays the spares out again)
+  layout auto   (lay them out again in the current mode, letting go of the ones placed by hand)
+  layout move WL-N X Y   (put that spare's output there, by hand)
 
 Spare outputs are WL-<screens> .. WL-<screens + slots - 1>. A floating window's output is its
 frame plus a margin on each side (FLOAT_MARGIN pixels), so menus have room; the panel shows
-only the window. Spares are placed apart from the screens and from each other in KWin's
-layout, all within Xwayland's 32767-pixel limit.
+only the window. In KWin's layout the enabled spares sit flush against the screens and
+against each other (relayout), so a mouse that moves on its own (Deskflow's) crosses between
+a screen and a floating window at a shared edge: KWin hands the pointer to the nearest
+output, and across a gap that takes a long push. FLOAT_LAYOUT in ~/.config/frametop.conf says
+how: "row" (the default) puts them to the right of the screens in slot order, which is the
+order they floated in; "vr" puts them there in the order their panels are around you, from
+the left. Both to the right: nothing can go left of 0 (KWin's layout and Deskflow's picture
+of it start there), and moving the screens over to make room disturbs every window on them.
+The row is laid out again whenever a spare turns on or off or changes size or scale, and
+when the outputs change. An output placed by hand ("layout move", from the live view's
+layout) stays put until its window goes back or the next "layout row|vr|auto". All within
+Xwayland's 32767-pixel limit.
 
 Usage: ft-floatd [--screens N] [--slots N] [--margin PX] [--control NAME] [--socket NAME]
 Defaults: FT_SCREEN_COUNT (from the session) or the layout's count, FLOAT_SLOTS and
@@ -73,7 +87,7 @@ SERVICE = IFACE = "org.frametop.Float"
 PATH = "/Float"
 SCRIPT = "frametop-float"
 POLL_SECONDS = 20        # NextCommand answers empty after this (KWin's D-Bus timeout is 25 s)
-SPARE_X, SPARE_CELL = 12000, 5000  # spares in KWin's layout: a grid from here, 4 across
+SPARE_X, SPARE_CELL = 12000, 5000  # a spare's place in KWin's layout until it's laid out (relayout): a grid, 4 across
 PULL_OUT = 0.3           # a floated window starts this far in front of its screen (metres), clear of it
 DEFAULT_MPP = 1.6 / 1920  # metres per pixel when ft-screens can't say (no SteamVR)
 PLACES_PATH = os.path.expanduser("~/.config/frametop-float.json")  # each app's last floating place
@@ -289,6 +303,8 @@ class Slot:
         self.index = screens + k + 1  # ft-screens' number (1-based)
         self.pos = (SPARE_X + (k % 4) * SPARE_CELL, (k // 4) * SPARE_CELL)
         self.size = None              # its output's size in pixels, as last set
+        self.logical = None           # the same in KWin's units (pixels / scale): its size in the layout
+        self.held = False             # placed by hand (or found where the last ft-floatd left it): relayout leaves it
         self.want = None              # the size in pixels asked for (size is at least that)
         self.kscale = 1.0             # its output's scale in KWin, as last set
         self.window = None            # Float
@@ -312,6 +328,8 @@ class Daemon:
         self.next_token = 1
         self.sock = None         # our socket (set by main), for deferred replies
         self.places = load_places()  # app -> {"rel": pose by the primary screen, "pixels", "scale"}
+        self.mode = args.layout      # how the spares are placed in KWin's layout: row | vr (relayout)
+        self.outputs_moved = 0.0     # when outputs were last moved (relayout, move_slot): KWin shuffles windows then
 
     # ------------------------------------------------------------ the script
 
@@ -375,6 +393,9 @@ class Daemon:
             self.command(cmd="config", screens=self.screens_n)
             # The script reports every window after "config"; spares nothing floats on are off.
             GLib.timeout_add(1500, self.disable_unused)
+            return
+        if kind == "outputs":
+            self.relayout()  # KWin's outputs changed (ft-layout moved the screens, a spare resized): the row again
             return
         if wid in self.gone:
             return  # an event that came after the window closed (it would bring it back)
@@ -451,6 +472,12 @@ class Daemon:
         slot = self.spare_slot(ev.get("output", ""))
         f = self.floats.get(wid)
         if f and f.slot is not slot and ev["ev"] == "output":
+            if self.shuffling():
+                # Outputs just moved: KWin put it on another one for a moment. Back where it goes.
+                self.command(cmd="place", id=wid, output=f.slot.output, x=f.slot.pos[0] + (0 if f.full else self.margin) / f.scale,
+                             y=f.slot.pos[1] + (0 if f.full else self.margin) / f.scale, w=f.frame["w"], h=f.frame["h"],
+                             keepFullScreen=f.full)
+                return
             # Left its spare (KWin moved it, or docking): it's not floating any more.
             if slot is None:
                 log(f"{wid[:9]} left its floating output")
@@ -459,6 +486,8 @@ class Daemon:
             return
         if slot is None or f:
             return
+        if ev["ev"] == "output" and self.shuffling():
+            return  # a screen's window, on a spare for a moment while KWin sorts the outputs out
         if ev.get("popup") or (ev.get("transient") and ev.get("parent") in self.floats):
             self.sub(ev)
             return
@@ -473,6 +502,11 @@ class Daemon:
             slot.window = f
             self.floats[wid] = f
             f.scale = slot.kscale = output_scales().get(slot.output, 1.0)
+            # Where the last ft-floatd left its output, and left there (follow below puts the
+            # window by slot.pos): maybe placed by hand. "layout auto" lays it out again.
+            r = output_rects().get(slot.output)
+            if r:
+                slot.pos, slot.held = (round(r[0]), round(r[1])), True
             # Its panel's density as it is (follow below sets the panel again).
             g, px = self.panel_get(slot.index), round(ev["frame"]["w"] * f.scale)
             if g and g["metres"] > 0 and px > 0:
@@ -512,13 +546,86 @@ class Daemon:
         return False
 
     def set_size(self, slot, want, k=None):
-        """Size a spare's output to at least want (pixels) at its current scale in KWin."""
+        """Size a spare's output to at least want (pixels) at its current scale in KWin. True when
+        that's a change (the row of spares needs laying out again, relayout)."""
         if want == slot.want:
-            return
+            return False
         k = k or whole(slot.kscale)
         (w, pw), (h, ph) = kwin_size(want[0], slot.kscale, k), kwin_size(want[1], slot.kscale, k)
-        slot.want, slot.size = want, (pw, ph)
+        slot.want, slot.size, slot.logical = want, (pw, ph), (w, h)
         self.screens.ask(f"size {slot.index} {w} {h}")
+        return True
+
+    def tell(self, cmd, slot):
+        """The script: where slot's window is in KWin's layout ("geometry" moves it there; "settle"
+        only says it will be there once its output moves, so that putting the windows back after
+        the change (the script's putBack) puts it there, not where it was)."""
+        f = slot.window
+        if f and f.frame:
+            m = 0 if f.full else self.margin
+            self.command(cmd=cmd, id=f.id, output=slot.output, x=slot.pos[0] + m / f.scale, y=slot.pos[1] + m / f.scale,
+                         w=f.frame["w"], h=f.frame["h"])
+
+    def by_vr_position(self, slots):
+        """In the order their panels are around you, from the left (FLOAT_LAYOUT=vr): by where
+        each is along the primary screen's width. Without SteamVR, as they are."""
+        ref = self.reference()
+        if not ref:
+            return slots
+        at = {}
+        for s in slots:
+            g = self.panel_get(s.index)
+            at[s] = to_local(ref, g)[0] if g else 0.0  # metres right of the primary screen's centre
+        return sorted(slots, key=lambda s: at[s])
+
+    def relayout(self, skip=None):
+        """The enabled spares in a row right of the screens, flush against them and against each
+        other in KWin's layout (see the top), so a mouse that moves on its own crosses between
+        panels at a shared edge (KWin hands the pointer to the nearest output). Moves the
+        outputs that aren't where the row puts them; KWin moves their windows with them. skip's
+        output is being turned on by the caller, which places it; its place is worked out here
+        all the same. Outputs placed by hand (held) stay."""
+        rects = output_rects()
+        x = 0
+        for i in range(self.screens_n):
+            r = rects.get(f"WL-{i}")
+            if r:
+                x = max(x, round(r[0] + r[2]))
+        row = [s for s in self.slots if s.window is not None and s.logical is not None and not s.held]
+        if self.mode == "vr":
+            row = self.by_vr_position(row)
+        moves, shifted = [], []
+        for s in row:
+            pos, x = (x, 0), x + s.logical[0]
+            if pos == s.pos:
+                continue
+            s.pos = pos
+            if s is skip:
+                continue
+            self.tell("settle", s)
+            moves.append(f"output.{s.output}.position.{s.pos[0]},{s.pos[1]}")
+            shifted.append(s)
+        if not moves:
+            return
+        log("spares: " + ", ".join(f"{s.output} at {s.pos[0]},{s.pos[1]}" for s in shifted))
+        self.outputs_moved = time.monotonic()
+        kscreen(*moves)
+        for s in shifted:
+            self.tell("geometry", s)
+
+    def move_slot(self, slot, pos):
+        """A spare's output placed by hand: there, and left there (see relayout)."""
+        slot.pos, slot.held = pos, True
+        log(f"{slot.output} at {pos[0]},{pos[1]}, placed by hand")
+        self.tell("settle", slot)
+        self.outputs_moved = time.monotonic()
+        kscreen(f"output.{slot.output}.position.{pos[0]},{pos[1]}")
+        self.tell("geometry", slot)
+
+    def shuffling(self):
+        """KWin is still sorting windows out after outputs moved: a window on another output for
+        a moment isn't one that left."""
+        return time.monotonic() - self.outputs_moved < 3.0
 
     def disable_unused(self):
         off = [f"output.{s.output}.disable" for s in self.slots if s.window is None]
@@ -527,10 +634,14 @@ class Daemon:
         return False
 
     def free_slot(self):
-        for s in self.slots:
-            if s.window is None:
-                return s
-        return None
+        """A spare nothing floats on: after the ones in use when there is one, so that it goes
+        on the end of the row in KWin's layout and nothing else moves (relayout)."""
+        free = [s for s in self.slots if s.window is None]
+        if not free:
+            return None
+        used = [s.k for s in self.slots if s.window is not None]
+        after = [s for s in free if not used or s.k > max(used)]
+        return after[0] if after else free[0]
 
     def screen_mpp(self, output):
         """Metres per pixel on the screen showing this output, from ft-screens."""
@@ -568,8 +679,8 @@ class Daemon:
         w, h = round(fr["w"] * s), round(fr["h"] * s)
         log(f"{wid[:9]} ({ev.get('cls')}) floats on {slot.output}: {w}x{h} px, scale {s:g}")
         # The spare's size first (while it's off, so its first frame is right; it's sized at
-        # its old scale, for pixels that suit the new one), then its panel, then turn it on,
-        # then the window.
+        # its old scale, for pixels that suit the new one), then its panel, then its place in
+        # the row (the spares after it move over), then turn it on, then the window.
         slot.want = None
         self.set_size(slot, (w + 2 * m, h + 2 * m), whole(slot.kscale, s))
         self.screens.ask(f"scale {slot.index} {s:g}")  # for pointer positions (KWin's units)
@@ -578,9 +689,12 @@ class Daemon:
             self.pose(f, *place)
         else:
             self.place_panel(f, ev)
+        slot.held = False
+        self.relayout(skip=slot)
         kscreen(f"output.{slot.output}.enable", f"output.{slot.output}.scale.{s:g}",
                 f"output.{slot.output}.position.{slot.pos[0]},{slot.pos[1]}")
         self.rescaled(slot, s)
+        self.relayout(skip=slot)  # its size in KWin's units changed with the scale
         self.command(cmd="place", id=wid, output=slot.output, x=slot.pos[0] + m / s, y=slot.pos[1] + m / s,
                      w=fr["w"], h=fr["h"], onAllDesktops=True)
         return f
@@ -633,7 +747,8 @@ class Daemon:
             x, y = round((fr["x"] - out["x"]) * s), round((fr["y"] - out["y"]) * s)
             self.set_panel(f, (x, y, w, h), title=round((cl["y"] - fr["y"]) * s))
             return
-        self.set_size(slot, f.normal if full and f.normal else (w + 2 * m, h + 2 * m))
+        if self.set_size(slot, f.normal if full and f.normal else (w + 2 * m, h + 2 * m)):
+            self.relayout(skip=slot)
         if not full:
             x0, y0 = slot.pos[0] + m / s, slot.pos[1] + m / s
             if abs(fr["x"] - x0) > 0.5 or abs(fr["y"] - y0) > 0.5:
@@ -667,6 +782,7 @@ class Daemon:
         kscreen(f"output.{slot.output}.scale.{s:g}")
         self.screens.ask(f"scale {slot.index} {s:g}")
         self.rescaled(slot, s)
+        self.relayout(skip=slot)  # its size in KWin's units changed with the scale
         self.command(cmd="geometry", id=f.id, x=slot.pos[0] + m / s, y=slot.pos[1] + m / s, w=w / s, h=h / s)
 
     def rescaled(self, slot, s):
@@ -721,10 +837,12 @@ class Daemon:
         if slot.window is f:
             slot.window = None
             slot.want = None
+            slot.held = False
         for sub_id in list(f.subs):
             self.drop_sub(sub_id)
         self.screens.ask(f"unfloat {slot.index}", quiet=True)
         kscreen(f"output.{slot.output}.disable")
+        self.relayout()  # the spares after it close the gap
 
     # ------------------------------------------------------------ launching floating
 
@@ -1052,6 +1170,33 @@ class Daemon:
             return self.open_profile(text.split(None, 1)[1])
         if cmd == "list":
             return "ok " + " ".join(f"{s.output}:{s.window.id if s.window else '-'}" for s in self.slots)
+        if cmd == "layout":
+            if not rest:
+                return "ok " + json.dumps({"mode": self.mode, "held": [s.output for s in self.slots if s.held and s.window]})
+            if rest[0] in ("row", "vr", "auto") and len(rest) == 1:
+                if rest[0] != "auto":
+                    self.mode = rest[0]
+                    try:
+                        ft_layout.write_conf_value("FLOAT_LAYOUT", self.mode)
+                    except OSError as e:
+                        log(f"couldn't save FLOAT_LAYOUT: {e}")
+                for s in self.slots:
+                    s.held = False
+                self.relayout()
+                return "ok"
+            if rest[0] == "move" and len(rest) == 4:
+                slot = self.spare_slot(rest[1])
+                try:
+                    pos = (int(rest[2]), int(rest[3]))
+                except ValueError:
+                    return "error layout move takes whole numbers"
+                if not slot or not slot.window:
+                    return f"error nothing floats on {rest[1]}"
+                if min(pos) < 0 or max(pos[0] + slot.logical[0], pos[1] + slot.logical[1]) > 32767:
+                    return "error outside KWin's layout (0 to 32767)"
+                self.move_slot(slot, pos)
+                return "ok"
+            return "error layout [row|vr|auto|move WL-N X Y]"
         if cmd == "quit":
             GLib.idle_add(self.loop.quit)
             return "ok"
@@ -1162,6 +1307,8 @@ def main():
     p.add_argument("--screens", type=int, default=int(os.environ.get("FT_SCREEN_COUNT") or 0))
     p.add_argument("--slots", type=int, default=int(conf.get("FLOAT_SLOTS") or 8))
     p.add_argument("--margin", type=int, default=int(conf.get("FLOAT_MARGIN") or 300))
+    p.add_argument("--layout", choices=("row", "vr"), default=conf.get("FLOAT_LAYOUT") if conf.get("FLOAT_LAYOUT") in ("row", "vr") else "row",
+                   help="how the spares are placed in KWin's layout (FLOAT_LAYOUT)")
     p.add_argument("--control", default="ft_screens")
     p.add_argument("--socket", default="frametop_float")
     args = p.parse_args()

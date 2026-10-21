@@ -11,6 +11,8 @@
   ft-float run COMMAND [ARG...]  the same for a command
   ft-float close ID            close a window
   ft-float list                the spare outputs and what floats on them
+  ft-float layout [row|vr|auto|move WL-N X Y]
+                               how the spares are placed in KWin's layout (see ft_floatd.py)
 FT_FLOAT_SOCKET names ft-floatd's socket (default frametop_float).
 """
 import json

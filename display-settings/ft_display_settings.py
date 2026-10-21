@@ -64,22 +64,7 @@ SCALES = [0.75, 1.0, 1.25, 4 / 3, 1.5, 1.75, 2.0]
 ROTATIONS = [("normal", "Landscape"), ("left", "Portrait"), ("right", "Portrait (flipped)")]
 
 
-def write_conf_value(key, value):
-    """Set KEY=value in frametop.conf, keeping comments and the rest of the file."""
-    try:
-        with open(CONF_PATH) as f:
-            lines = f.read().splitlines()
-    except OSError:
-        lines = []
-    for i, line in enumerate(lines):
-        if line.split("#", 1)[0].strip().startswith(f"{key}="):
-            comment = line[line.index("#"):] if "#" in line else ""
-            lines[i] = f"{key}={value}" + (f"   {comment}" if comment else "")
-            break
-    else:
-        lines.append(f"{key}={value}")
-    with open(CONF_PATH, "w") as f:
-        f.write("\n".join(lines) + "\n")
+write_conf_value = ft_layout.write_conf_value  # KEY=value in frametop.conf (ft-floatd writes it too)
 
 
 def host_command(*cmd):
