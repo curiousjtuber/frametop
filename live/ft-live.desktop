@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Frametop Live View
+GenericName=The VR desktop's arrangement as it is now
+Comment=Screens, floating windows, KWin's layout, and the pointer, live in the browser
+Exec=@REPO@/live/ft-live --open --idle 15
+Icon=view-list-details
+Categories=Settings;
+Keywords=display;screen;layout;window;floating;pointer;cursor;mouse;live;frametop;

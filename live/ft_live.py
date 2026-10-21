@@ -16,8 +16,15 @@ terminal in the Frametop desktop it uses that session's D-Bus; from anywhere els
 borrows the session's environment from ft-floatd. The page is on http://127.0.0.1:7780/
 by default: from a PC, ssh -L 7780:127.0.0.1:7780 steamos@frame.local, or --bind 0.0.0.0.
 
-Usage: ft-live [--port N] [--bind ADDR] [--once] [--control NAME] [--float NAME]
-  --once   print the state as JSON once and exit (no server)
+Usage: ft-live [--port N] [--bind ADDR] [--open] [--idle SECONDS] [--once] [--control NAME]
+               [--float NAME]
+  --open         open the page in the default browser (xdg-open) once the server is up; with an
+                 ft-live already on the port, only that
+  --idle SECONDS quit after this long without a request from the page: the browser tab was
+                 closed (the page asks ten times a second). 0, the default, keeps running
+  --once         print the state as JSON once and exit (no server)
+The menu entry, Frametop Live View (live/ft-live.desktop, installed by
+display-settings/install.sh), runs ft-live --open --idle 15.
 """
 import argparse
 import http.server
@@ -27,6 +34,7 @@ import os
 import re
 import signal
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -155,6 +163,7 @@ class Live:
         self.kwin_at = 0.0
         self.cache = None         # (time, state) built for the page, at most ten a second
         self.state_lock = threading.Lock()
+        self.asked_at = time.time()  # the page's last request (see --idle)
 
     def snapshot(self, text):
         try:
@@ -168,6 +177,7 @@ class Live:
     def state(self):
         with self.state_lock:
             now = time.time()
+            self.asked_at = now
             if self.cache and now - self.cache[0] < 0.1:
                 return self.cache[1]
             s = self.build()
@@ -278,15 +288,48 @@ class Server(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
 
 
+def url(args):
+    host = "127.0.0.1" if args.bind in ("0.0.0.0", "::", "") else args.bind
+    return f"http://{host}:{args.port}/"
+
+
+def port_taken(args):
+    try:
+        with socket.create_connection(("127.0.0.1" if args.bind in ("0.0.0.0", "::", "") else args.bind,
+                                       args.port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def open_page(args):
+    """The page in the default browser. xdg-open returns once the browser took the URL."""
+    for opener in ("xdg-open", "kde-open"):
+        try:
+            subprocess.Popen([opener, url(args)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            return
+        except OSError:
+            continue
+    log("no xdg-open or kde-open to open the page with")
+
+
 def main():
     p = argparse.ArgumentParser(description="A live view of the Frametop desktop's arrangement")
     p.add_argument("--port", type=int, default=7780)
     p.add_argument("--bind", default="127.0.0.1")
+    p.add_argument("--open", action="store_true", help="open the page in the default browser")
+    p.add_argument("--idle", type=float, default=0, metavar="SECONDS",
+                   help="quit after this long without a request from the page (0: never)")
     p.add_argument("--once", action="store_true", help="print the state once as JSON and exit")
     p.add_argument("--control", default="ft_screens", help="ft-screens' control socket")
     p.add_argument("--float", default="frametop_float", help="ft-floatd's socket")
     args = p.parse_args()
 
+    if args.open and not args.once and port_taken(args):
+        log(f"an ft-live is on {url(args)} already: opening that")
+        open_page(args)
+        return
     session_env()
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
@@ -308,11 +351,27 @@ def main():
         return
 
     Handler.live = live
-    server = Server((args.bind, args.port), Handler)
+    try:
+        server = Server((args.bind, args.port), Handler)
+    except OSError as e:
+        unload_script(kwin)
+        sys.exit(f"ft-live: can't listen on {args.bind}:{args.port}: {e}")
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    log(f"live view on http://{args.bind}:{args.port}/")
+    log(f"live view on {url(args)}")
     for sig in (signal.SIGINT, signal.SIGTERM):
         GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, quit_)
+    if args.open:
+        open_page(args)
+    if args.idle > 0:
+        # The browser takes a moment to come up: the idle clock starts now, and runs out
+        # only when the page has asked nothing for --idle seconds.
+        def idle_check():
+            if time.time() - live.asked_at > args.idle:
+                log(f"no request from the page for {args.idle:g} s: quitting")
+                loop.quit()
+                return False
+            return True
+        GLib.timeout_add(1000, idle_check)
     try:
         loop.run()
     finally:

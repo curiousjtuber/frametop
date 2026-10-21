@@ -224,12 +224,15 @@ The page redraws ten times a second from `/state.json`, which is also there for 
 
 ```
 live/ft-live                  # http://127.0.0.1:7780/ (from a PC: ssh -L 7780:127.0.0.1:7780 steamos@frame.local)
+live/ft-live --open --idle 15 # the menu entry: opens the page in the browser, quits 15 s after it's closed
 live/ft-live --bind 0.0.0.0   # reachable from the network
 live/ft-live --once           # print the state once as JSON
 ```
 
-It runs on the host, from a terminal in the Frametop desktop or over SSH (then it borrows
-the session's D-Bus from ft-floatd). Frametop Display Settings' preview shows the planned
+Frametop Live View, in the desktop's application menu under Settings (installed by
+`display-settings/install.sh`), opens the page in the desktop's browser; ft-live quits once
+the page has been closed for 15 seconds. It runs on the host, from a terminal in the
+Frametop desktop or over SSH (then it borrows the session's D-Bus from ft-floatd). Frametop Display Settings' preview shows the planned
 layout instead: what Arrange now would do, without floating windows or the pointer.
 
 ## Displays off and sleep
