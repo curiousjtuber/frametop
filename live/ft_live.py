@@ -180,20 +180,34 @@ class Live:
         ps, screens = panels(self.args.control)
         fl = floats(self.args.float)
         by_output = {o["name"]: o for o in kwin.get("outputs", [])}
+        by_id = {w["id"]: w for w in kwin.get("windows", [])}
         for p in ps:
             o = by_output.get(p["output"])
             p["rect"] = o["rect"] if o else None
             p["scale"] = o["scale"] if o else 1.0
             p["window"] = fl.get(p["output"], "")
-        # The pointer: KWin's position (logical, global) on the output under it, in pixels.
+            # What the panel shows of its output, in pixels: a floating panel is cropped to its
+            # window, and the margin around it (menus' room) is nowhere to be seen in VR.
+            w = by_id.get(p["window"])
+            if p["kind"] == "float" and w and p["rect"] and w["output"] == p["output"]:
+                f, r, k = w["frame"], p["rect"], p["scale"]
+                p["crop"] = [(f["x"] - r["x"]) * k, (f["y"] - r["y"]) * k, f["w"] * k, f["h"] * k]
+            else:
+                p["crop"] = [0, 0, p["pixels"][0], p["pixels"][1]]
+        # The pointer: KWin's position (logical, global) on the output under it, in pixels, and
+        # whether that spot shows in VR.
         cursor = dict(kwin.get("cursor") or {})
-        cursor["output"], cursor["panel"], cursor["px"] = "", 0, None
+        cursor["output"], cursor["panel"], cursor["px"], cursor["shown"] = "", 0, None, False
         if "x" in cursor:
             for p in ps:
                 r = p["rect"]
                 if r and r["x"] <= cursor["x"] < r["x"] + r["w"] and r["y"] <= cursor["y"] < r["y"] + r["h"]:
                     cursor["output"], cursor["panel"] = p["output"], p["n"]
-                    cursor["px"] = [(cursor["x"] - r["x"]) * p["scale"], (cursor["y"] - r["y"]) * p["scale"]]
+                    px = [(cursor["x"] - r["x"]) * p["scale"], (cursor["y"] - r["y"]) * p["scale"]]
+                    cursor["px"] = px
+                    c = p["crop"]
+                    cursor["shown"] = (p["enabled"] and not p["hidden"]
+                                       and c[0] <= px[0] < c[0] + c[2] and c[1] <= px[1] < c[1] + c[3])
                     break
         return {"time": time.time(), "kwin_age": round(time.time() - kwin_at, 1) if kwin_at else None,
                 "head": head(self.args.control), "screens": screens, "panels": ps,

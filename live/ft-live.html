@@ -8,11 +8,13 @@
   :root {
     --bg: #fafafa; --fg: #232629; --dim: #7f8c8d; --line: #bdc3c7; --panel: #3daee9; --float: #e67e22;
     --window: rgba(35, 38, 41, 0.08); --active: #27ae60; --cursor: #da4453; --head: #232629;
+    --margin: rgba(230, 126, 34, 0.14);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #1b1e20; --fg: #eff0f1; --dim: #95a5a6; --line: #4d4d4d; --panel: #3daee9; --float: #f39c12;
       --window: rgba(239, 240, 241, 0.1); --active: #2ecc71; --cursor: #ed1515; --head: #eff0f1;
+      --margin: rgba(243, 156, 18, 0.18);
     }
   }
   html { background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
@@ -37,7 +39,9 @@
   <div class="view"><h2>Room, from above (you are the dot; forward is up)</h2><canvas id="above" height="320"></canvas></div>
   <div class="view"><h2>Room, from the front (x and height; panels as if facing you)</h2><canvas id="front" height="320"></canvas></div>
 </div>
-<h2>Panels and their windows (KWin outputs; the pointer is the red cross)</h2>
+<h2>KWin's layout (logical pixels, as Display Configuration shows monitors; a floating output's margin, which VR doesn't show, is shaded)</h2>
+<canvas id="layout" height="240"></canvas>
+<h2>Panels and their windows (KWin outputs; the pointer is the red cross; the shaded margin is not shown in VR)</h2>
 <canvas id="panels" height="360"></canvas>
 <h2>Windows</h2>
 <table id="windows"><thead><tr><th>Panel</th><th>Window</th><th>Class</th><th>Frame (x, y, w × h)</th><th>State</th></tr></thead><tbody></tbody></table>
@@ -65,8 +69,25 @@ function colour(p) { return p.kind === "float" ? css("--float") : css("--panel")
 // Where the pointer is on panel p, in the room: the fraction across and down the panel.
 function cursorOn(p, cursor) {
   if (!cursor.px || cursor.panel !== p.n || !p.centre) return null;
-  const u = cursor.px[0] / p.pixels[0] - 0.5, v = 0.5 - cursor.px[1] / p.pixels[1];
+  const c = p.crop, u = (cursor.px[0] - c[0]) / c[2] - 0.5, v = 0.5 - (cursor.px[1] - c[1]) / c[3];
   return add(add(p.centre, p.xaxis, u * p.metres), p.yaxis, v * p.height);
+}
+// The pointer in the room: a filled dot where VR shows it, hollow where it doesn't (a floating
+// window's margin, a hidden panel).
+function dot(ctx, D, shown) {
+  ctx.setLineDash([]); ctx.beginPath(); ctx.arc(D[0], D[1], 5, 0, 2 * Math.PI);
+  if (shown) { ctx.fillStyle = css("--cursor"); ctx.fill(); }
+  else { ctx.strokeStyle = css("--cursor"); ctx.lineWidth = 2; ctx.stroke(); }
+}
+function cross(ctx, cx, cy) {
+  ctx.strokeStyle = css("--cursor"); ctx.lineWidth = 2; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
+}
+// A floating output's margin: the output's rectangle (x, y, w, h on the canvas) outside its crop.
+function shadeMargin(ctx, x, y, w, h, crop, k) {
+  ctx.fillStyle = css("--margin");
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.rect(x + crop[0] * k, y + crop[1] * k, crop[2] * k, crop[3] * k);
+  ctx.fill("evenodd");
 }
 // A fit of points [[a, b], ...] into a w × h box with a margin: returns [x, y] => [px, py].
 function fit(points, w, h, margin, flipB) {
@@ -104,7 +125,7 @@ function drawAbove(state) {
     const C = P(p.centre[0], -p.centre[2]);
     ctx.fillText(label(p), C[0] + 6, C[1] - 6);
     const c = cursorOn(p, state.cursor);
-    if (c) { const D = P(c[0], -c[2]); ctx.fillStyle = css("--cursor"); ctx.beginPath(); ctx.arc(D[0], D[1], 5, 0, 2 * Math.PI); ctx.fill(); }
+    if (c) dot(ctx, P(c[0], -c[2]), state.cursor.shown);
   }
   if (head) {
     const H = P(head.x, -head.z), yaw = head.yaw * Math.PI / 180;
@@ -138,7 +159,7 @@ function drawFront(state) {
     ctx.fillStyle = css("--fg");
     ctx.fillText(label(p), A[0] + 4, A[1] + 14);
     const c = cursorOn(p, state.cursor);
-    if (c) { const D = P(c[0], c[1]); ctx.fillStyle = css("--cursor"); ctx.beginPath(); ctx.arc(D[0], D[1], 5, 0, 2 * Math.PI); ctx.fill(); }
+    if (c) dot(ctx, P(c[0], c[1]), state.cursor.shown);
   }
   if (head) {
     const H = P(head.x, head.y);
@@ -161,6 +182,7 @@ function drawPanels(state) {
     ctx.setLineDash(p.hidden ? [4, 6] : []);
     ctx.strokeRect(x, y, pw, ph);
     ctx.setLineDash([]);
+    if (p.kind === "float") shadeMargin(ctx, x, y, pw, ph, p.crop, k);
     ctx.fillStyle = css("--fg");
     ctx.fillText(`${label(p)}  ${p.output}  ${p.pixels[0]}×${p.pixels[1]}${p.metres ? `  ${p.metres.toFixed(2)} m` : ""}${p.hidden ? "  hidden" : ""}`, x, y - 6);
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, pw, ph); ctx.clip();
@@ -183,13 +205,34 @@ function drawPanels(state) {
       }
     }
     const c = state.cursor;
-    if (c.px && c.panel === p.n) {
-      const cx = x + c.px[0] * k, cy = y + c.px[1] * k;
-      ctx.strokeStyle = css("--cursor"); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
-    }
+    if (c.px && c.panel === p.n) cross(ctx, x + c.px[0] * k, y + c.px[1] * k);
     ctx.restore();
     x += pw + gap;
+  }
+}
+
+// KWin's own picture: the enabled outputs where they are in its layout, in logical pixels.
+// The screens start at 0,0 and the spares sit far to the right, so nothing spills between them.
+function drawLayout(state) {
+  const [ctx, w, h] = prepare($("layout"));
+  const shown = state.panels.filter(p => p.enabled && p.rect);
+  if (!shown.length) return;
+  const pts = [];
+  for (const p of shown) pts.push([p.rect.x, p.rect.y], [p.rect.x + p.rect.w, p.rect.y + p.rect.h]);
+  const P = fit(pts, w, h, 24, false);
+  const k = (P(1, 0)[0] - P(0, 0)[0]);  // canvas pixels per logical pixel
+  for (const p of shown) {
+    const A = P(p.rect.x, p.rect.y), rw = p.rect.w * k, rh = p.rect.h * k;
+    ctx.fillStyle = css("--window"); ctx.fillRect(A[0], A[1], rw, rh);
+    if (p.kind === "float") shadeMargin(ctx, A[0], A[1], rw, rh, p.crop, k / p.scale);
+    ctx.strokeStyle = colour(p); ctx.lineWidth = 2; ctx.setLineDash(p.hidden ? [4, 6] : []);
+    ctx.strokeRect(A[0], A[1], rw, rh); ctx.setLineDash([]);
+    ctx.fillStyle = css("--fg");
+    ctx.fillText(`${label(p)}  ${p.output}`, A[0], A[1] - 6);
+    ctx.fillStyle = css("--dim");
+    ctx.fillText(`${p.rect.w}×${p.rect.h} at ${p.rect.x}, ${p.rect.y}${p.scale !== 1 ? `  scale ${p.scale}` : ""}`, A[0], A[1] + rh + 14);
+    const c = state.cursor;
+    if (c.px && c.panel === p.n) cross(ctx, A[0] + c.px[0] / p.scale * k, A[1] + c.px[1] / p.scale * k);
   }
 }
 
@@ -215,16 +258,31 @@ function titles(state) {
   for (const p of state.panels) if (p.window) p.title = (caption[p.window] || "").slice(0, 24);
 }
 
+function pointerText(state) {
+  const c = state.cursor;
+  if (!c.px) return "pointer on no panel";
+  const p = state.panels.find(p => p.n === c.panel);
+  let where = `pointer on panel ${c.panel} at ${Math.round(c.px[0])}, ${Math.round(c.px[1])} px (KWin ${c.x}, ${c.y})`;
+  if (!c.shown && p) {
+    const cr = p.crop, px = c.px, side = [];
+    if (px[0] < cr[0]) side.push(`${Math.round(cr[0] - px[0])} px left of`); else if (px[0] >= cr[0] + cr[2]) side.push(`${Math.round(px[0] - cr[0] - cr[2] + 1)} px right of`);
+    if (px[1] < cr[1]) side.push(`${Math.round(cr[1] - px[1])} px above`); else if (px[1] >= cr[1] + cr[3]) side.push(`${Math.round(px[1] - cr[1] - cr[3] + 1)} px below`);
+    where += p.hidden ? ", a hidden panel: VR shows nothing there"
+           : p.kind === "float" ? `, in the margin ${side.join(" and ")} the window: VR shows nothing there` : ", not shown";
+  }
+  return where;
+}
+
 function render(state) {
   titles(state);
   const head = state.head, c = state.cursor;
   $("status").textContent = [
     head ? `head ${head.x.toFixed(2)}, ${head.y.toFixed(2)}, ${head.z.toFixed(2)} m, yaw ${head.yaw.toFixed(0)}°` : "no head pose",
     `${state.screens} screen${state.screens === 1 ? "" : "s"}, ${state.panels.filter(p => p.enabled && p.kind === "float").length} floating`,
-    c.px ? `pointer on panel ${c.panel} at ${Math.round(c.px[0])}, ${Math.round(c.px[1])} px (KWin ${c.x}, ${c.y})` : "pointer on no panel",
+    pointerText(state),
     state.kwin_age === null ? "no KWin snapshot yet" : state.kwin_age > 5 ? `KWin snapshot ${state.kwin_age} s old` : ""
   ].filter(Boolean).join("  ·  ");
-  drawAbove(state); drawFront(state); drawPanels(state); fillTable(state);
+  drawAbove(state); drawFront(state); drawLayout(state); drawPanels(state); fillTable(state);
 }
 
 let last = null;

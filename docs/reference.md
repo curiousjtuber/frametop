@@ -213,8 +213,11 @@ float/ft-float list                   # the spare outputs and what floats on the
 ## ft-live, the live view
 
 `live/ft-live` shows the desktop's arrangement as it is now, in a browser: the screens and
-floating panels in the room, from above and from the front, each panel's windows, and the
-pointer. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
+floating panels in the room, from above and from the front; KWin's own layout of the outputs
+in logical pixels, as Display Configuration shows monitors; each panel's windows; and the
+pointer. A floating output's margin, the room around its window that VR never shows, is
+shaded, and a pointer there (easy with Deskflow's mouse) is drawn hollow, with the status
+line saying how far from the window it is. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
 a KWin script it loads into the running desktop (`live/frametop-live.js`, unloaded when
 ft-live quits; it changes nothing in KWin), and which window floats where from ft-floatd.
 The page redraws ten times a second from `/state.json`, which is also there for scripts.
