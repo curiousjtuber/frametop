@@ -30,6 +30,10 @@
   td.cap { white-space: normal; }
   .float { color: var(--float); } .screen { color: var(--panel); } .active { color: var(--active); font-weight: 600; }
   .dim { color: var(--dim); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 6px; }
+  .controls select, .controls button { font: inherit; padding: 3px 8px; }
+  #layout { cursor: default; touch-action: none; }
+  #layoutmsg { color: var(--cursor); }
 </style>
 </head>
 <body>
@@ -40,7 +44,16 @@
   <div class="view"><h2>Room, from the front (x and height; panels as if facing you)</h2><canvas id="front" height="320"></canvas></div>
 </div>
 <h2>KWin's layout (logical pixels, as Display Configuration shows monitors; a floating output's margin, which VR doesn't show, is shaded)</h2>
-<canvas id="layout" height="240"></canvas>
+<div class="controls">
+  <label>Place floating outputs <select id="mode">
+    <option value="row">right of the screens, as they floated</option>
+    <option value="vr">right of the screens, in their order around you</option>
+  </select></label>
+  <button id="arrange">Arrange now</button>
+  <span class="dim">Drag a floating output to place it by hand (it snaps to edges); it stays there until its window goes back or you arrange.</span>
+  <span id="layoutmsg"></span>
+</div>
+<canvas id="layout" height="280"></canvas>
 <h2>Panels and their windows (KWin outputs; the pointer is the red cross; the shaded margin is not shown in VR)</h2>
 <canvas id="panels" height="360"></canvas>
 <h2>Windows</h2>
@@ -211,30 +224,110 @@ function drawPanels(state) {
   }
 }
 
-// KWin's own picture: the enabled outputs where they are in its layout, in logical pixels.
-// The screens start at 0,0 and the spares sit far to the right, so nothing spills between them.
+// KWin's own picture: the enabled outputs where they are in its layout, in logical pixels, as
+// ft-floatd places them (in a row right of the screens, or by their position in VR) or as they
+// were dragged here. A drag moves the output's rectangle (snapping to the others' edges) and,
+// on release, sends ft-floatd "layout move": nothing moves in KWin until then.
+const layoutView = {map: null, rects: [], drag: null};
 function drawLayout(state) {
   const [ctx, w, h] = prepare($("layout"));
   const shown = state.panels.filter(p => p.enabled && p.rect);
-  if (!shown.length) return;
-  const pts = [];
-  for (const p of shown) pts.push([p.rect.x, p.rect.y], [p.rect.x + p.rect.w, p.rect.y + p.rect.h]);
+  layoutView.rects = [];
+  if (!shown.length) { layoutView.map = null; return; }
+  const drag = layoutView.drag;
+  const rectOf = p => drag && drag.output === p.output ? {x: drag.pos[0], y: drag.pos[1], w: p.rect.w, h: p.rect.h} : p.rect;
+  const pts = [[0, 0]];
+  for (const p of shown) { const r = rectOf(p); pts.push([r.x, r.y], [r.x + r.w, r.y + r.h]); }
   const P = fit(pts, w, h, 24, false);
-  const k = (P(1, 0)[0] - P(0, 0)[0]);  // canvas pixels per logical pixel
+  const k = P(1, 0)[0] - P(0, 0)[0], O = P(0, 0);  // canvas pixels per logical pixel, and 0,0
+  layoutView.map = {k: k, ox: O[0], oy: O[1]};
+  const held = new Set((state.layout && state.layout.held) || []);
   for (const p of shown) {
-    const A = P(p.rect.x, p.rect.y), rw = p.rect.w * k, rh = p.rect.h * k;
+    const r = rectOf(p), A = P(r.x, r.y), rw = r.w * k, rh = r.h * k;
+    layoutView.rects.push({p: p, x: A[0], y: A[1], w: rw, h: rh, r: r});
+    const dragging = drag && drag.output === p.output;
     ctx.fillStyle = css("--window"); ctx.fillRect(A[0], A[1], rw, rh);
     if (p.kind === "float") shadeMargin(ctx, A[0], A[1], rw, rh, p.crop, k / p.scale);
-    ctx.strokeStyle = colour(p); ctx.lineWidth = 2; ctx.setLineDash(p.hidden ? [4, 6] : []);
+    ctx.strokeStyle = dragging && drag.bad ? css("--cursor") : colour(p);
+    ctx.lineWidth = dragging ? 3 : 2; ctx.setLineDash(p.hidden ? [4, 6] : []);
     ctx.strokeRect(A[0], A[1], rw, rh); ctx.setLineDash([]);
     ctx.fillStyle = css("--fg");
-    ctx.fillText(`${label(p)}  ${p.output}`, A[0], A[1] - 6);
+    ctx.fillText(`${label(p)}  ${p.output}${held.has(p.output) ? "  · placed by hand" : ""}`, A[0], A[1] - 6);
     ctx.fillStyle = css("--dim");
-    ctx.fillText(`${p.rect.w}×${p.rect.h} at ${p.rect.x}, ${p.rect.y}${p.scale !== 1 ? `  scale ${p.scale}` : ""}`, A[0], A[1] + rh + 14);
+    ctx.fillText(`${r.w}×${r.h} at ${Math.round(r.x)}, ${Math.round(r.y)}${p.scale !== 1 ? `  scale ${p.scale}` : ""}`, A[0], A[1] + rh + 14);
     const c = state.cursor;
     if (c.px && c.panel === p.n) cross(ctx, A[0] + c.px[0] / p.scale * k, A[1] + c.px[1] / p.scale * k);
   }
 }
+
+// --- editing the layout
+async function layoutCommand(text) {
+  try {
+    const r = await fetch("cmd", {method: "POST", body: text});
+    const reply = (await r.text()).trim();
+    $("layoutmsg").textContent = reply.startsWith("ok") ? "" : reply;
+    return reply.startsWith("ok");
+  } catch (e) {
+    $("layoutmsg").textContent = "ft-live isn't answering: " + e;
+    return false;
+  }
+}
+$("mode").addEventListener("change", () => layoutCommand("layout " + $("mode").value));
+$("arrange").addEventListener("click", () => layoutCommand("layout auto"));
+
+const SNAP = 14;  // canvas pixels
+function snapTo(v, size, others, k) {
+  // Edges of the others this edge can snap to: flush against them, or aligned with them.
+  let best = v, dist = SNAP / k;
+  for (const o of others) {
+    for (const c of [o.a - size, o.b, o.a, o.b - size]) {
+      const d = Math.abs(c - v);
+      if (d < dist) { best = c; dist = d; }
+    }
+  }
+  return best;
+}
+const layoutCanvas = $("layout");
+layoutCanvas.addEventListener("pointerdown", e => {
+  const m = layoutView.map;
+  if (!m || !last) return;
+  const b = layoutCanvas.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+  const hit = layoutView.rects.slice().reverse().find(q => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
+  if (!hit) return;
+  if (hit.p.kind !== "float") { $("layoutmsg").textContent = "The screens are placed by ft-layout; drag a floating output."; return; }
+  layoutView.drag = {output: hit.p.output, p: hit.p, grab: [(x - m.ox) / m.k - hit.r.x, (y - m.oy) / m.k - hit.r.y],
+                     pos: [hit.r.x, hit.r.y], from: [hit.r.x, hit.r.y], bad: false, moved: false};
+  layoutCanvas.setPointerCapture(e.pointerId);
+  layoutCanvas.style.cursor = "grabbing";
+});
+layoutCanvas.addEventListener("pointermove", e => {
+  const d = layoutView.drag, m = layoutView.map;
+  if (!d || !m) return;
+  const b = layoutCanvas.getBoundingClientRect();
+  let x = (e.clientX - b.left - m.ox) / m.k - d.grab[0], y = (e.clientY - b.top - m.oy) / m.k - d.grab[1];
+  const r = d.p.rect, others = layoutView.rects.filter(q => q.p.output !== d.output).map(q => q.p.rect);
+  x = snapTo(x, r.w, others.map(o => ({a: o.x, b: o.x + o.w})), m.k);
+  y = snapTo(y, r.h, others.map(o => ({a: o.y, b: o.y + o.h})), m.k);
+  x = Math.max(0, Math.min(32767 - r.w, Math.round(x))); y = Math.max(0, Math.min(32767 - r.h, Math.round(y)));
+  d.pos = [x, y];
+  d.moved = d.moved || x !== d.from[0] || y !== d.from[1];
+  d.bad = others.some(o => x < o.x + o.w && x + r.w > o.x && y < o.y + o.h && y + r.h > o.y);
+  $("layoutmsg").textContent = d.bad ? "Overlaps another output" : "";
+  if (last) drawLayout(last);
+});
+async function dragEnd(e) {
+  const d = layoutView.drag;
+  if (!d) return;
+  layoutCanvas.style.cursor = "default";
+  if (d.moved && !d.bad && e.type === "pointerup") {
+    // Keep showing it there until ft-floatd's move comes through the state.
+    await layoutCommand(`layout move ${d.output} ${d.pos[0]} ${d.pos[1]}`);
+  }
+  layoutView.drag = null;
+  if (last) drawLayout(last);
+}
+layoutCanvas.addEventListener("pointerup", dragEnd);
+layoutCanvas.addEventListener("pointercancel", dragEnd);
 
 function fillTable(state) {
   const byPanel = {};
@@ -275,6 +368,7 @@ function pointerText(state) {
 
 function render(state) {
   titles(state);
+  if (state.layout && document.activeElement !== $("mode")) $("mode").value = state.layout.mode;
   const head = state.head, c = state.cursor;
   $("status").textContent = [
     head ? `head ${head.x.toFixed(2)}, ${head.y.toFixed(2)}, ${head.z.toFixed(2)} m, yaw ${head.yaw.toFixed(0)}°` : "no head pose",

@@ -64,7 +64,9 @@ PACKAGES = {
                            "the dashboard closed, in the dashboard, and in place of Steam's own keyboard in a "
                            "Steam field, and its lasers, controller tips and fingertips press keys",
     "kwin": "clicks near the far edge of a screen whose scale isn't 1; every screen comes back "
-            "after a desktop restart; floating a window; no blur behind the taskbar's menus; "
+            "after a desktop restart; floating a window, and a Deskflow mouse crossing from a screen "
+            "onto it at their shared edge (ft-floatd lays the outputs out flush: KWin moves a window "
+            "with its output); no blur behind the taskbar's menus; "
             "logging out with a Deskflow client connected (6.2.5 crashes there, and the session's "
             "logout watcher ends it: if it no longer crashes, the watcher can go)",
     "plasma-workspace": "the taskbar and panels after a desktop restart; no DiscoverNotifier or "

@@ -9,7 +9,10 @@ the windows on each panel, and the pointer. The state comes from three places:
   - a KWin script, frametop-live.js, loaded into the desktop's KWin over D-Bus like
     ft-floatd's, which sends the outputs, the windows on them, the active window, and KWin's
     pointer (org.frametop.Live.Snapshot) whenever they change. It's unloaded on exit;
-  - ft-floatd (@frametop_float, "list"): which window floats on which spare output.
+  - ft-floatd (@frametop_float): which window floats on which spare output ("list"), and how
+    the spares are placed in KWin's layout ("layout"). The page's layout is editable: it
+    sends ft-floatd's layout commands (POST /cmd: "layout row|vr|auto|move WL-N X Y"), so a
+    floating output can be dragged into place and the placement mode chosen.
 
 Runs on the host, with its python3 (dbus-python and PyGObject, like ft-floatd). From a
 terminal in the Frametop desktop it uses that session's D-Bus; from anywhere else (SSH) it
@@ -29,6 +32,7 @@ display-settings/install.sh), runs ft-live --open --idle 15.
 import argparse
 import http.server
 import json
+import urllib.request
 import math
 import os
 import re
@@ -219,14 +223,23 @@ class Live:
                     cursor["shown"] = (p["enabled"] and not p["hidden"]
                                        and c[0] <= px[0] < c[0] + c[2] and c[1] <= px[1] < c[1] + c[3])
                     break
+        layout = None
+        reply = ask(self.args.float, "layout")
+        if reply.startswith("ok "):
+            try:
+                layout = json.loads(reply[3:])
+            except ValueError:
+                pass
         return {"time": time.time(), "kwin_age": round(time.time() - kwin_at, 1) if kwin_at else None,
-                "head": head(self.args.control), "screens": screens, "panels": ps,
+                "head": head(self.args.control), "screens": screens, "panels": ps, "layout": layout,
                 "windows": kwin.get("windows", []), "active": kwin.get("active", ""), "cursor": cursor}
 
 
 class Service(dbus.service.Object):
     def __init__(self, bus, live):
-        super().__init__(dbus.service.BusName(SERVICE, bus), PATH)
+        # One ft-live per desktop: the script's snapshots go to the name's owner, and each
+        # ft-live unloads the script when it quits (do_not_queue: taken means taken).
+        super().__init__(dbus.service.BusName(SERVICE, bus, do_not_queue=True), PATH)
         self.live = live
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="")
@@ -282,6 +295,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send(404, "text/plain", b"not found\n")
 
+    def do_POST(self):
+        """A layout command for ft-floatd (only those: the page edits KWin's layout, nothing else)."""
+        if self.path.split("?", 1)[0] != "/cmd":
+            self.send(404, "text/plain", b"not found\n")
+            return
+        n = int(self.headers.get("Content-Length") or 0)
+        text = self.rfile.read(min(n, 4096)).decode(errors="replace").strip()
+        if text.split()[:1] != ["layout"]:
+            self.send(403, "text/plain", b"only layout commands\n")
+            return
+        reply = ask(self.live.args.float, text, timeout=5)
+        log(f"{text} -> {reply}")
+        self.send(200, "text/plain; charset=utf-8", (reply + "\n").encode())
+
 
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
@@ -334,7 +361,16 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     live = Live(args)
-    service = Service(bus, live)  # noqa: F841 (keeps the name)
+    try:
+        service = Service(bus, live)  # noqa: F841 (keeps the name)
+    except dbus.exceptions.NameExistsException:
+        if args.once and port_taken(args):
+            # The running one's state, then: starting a script of our own would take the
+            # snapshots away from it.
+            with urllib.request.urlopen(url(args) + "state.json", timeout=5) as r:
+                sys.stdout.write(json.dumps(json.load(r), indent=1) + "\n")
+            return
+        sys.exit(f"ft-live: another ft-live runs in this desktop already (its page: {url(args)})")
     kwin = load_script(bus)
     loop = GLib.MainLoop()
 
