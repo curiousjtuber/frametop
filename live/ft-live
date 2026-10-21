@@ -1,0 +1,3 @@
+#!/bin/sh
+# ft-live on the Frame host (see ft_live.py).
+exec python3 "$(dirname "$(readlink -f "$0")")/ft_live.py" "$@"

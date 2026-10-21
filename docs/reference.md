@@ -210,6 +210,25 @@ float/ft-float close ID               # close a window
 float/ft-float list                   # the spare outputs and what floats on them
 ```
 
+## ft-live, the live view
+
+`live/ft-live` shows the desktop's arrangement as it is now, in a browser: the screens and
+floating panels in the room, from above and from the front, each panel's windows, and the
+pointer. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
+a KWin script it loads into the running desktop (`live/frametop-live.js`, unloaded when
+ft-live quits; it changes nothing in KWin), and which window floats where from ft-floatd.
+The page redraws ten times a second from `/state.json`, which is also there for scripts.
+
+```
+live/ft-live                  # http://127.0.0.1:7780/ (from a PC: ssh -L 7780:127.0.0.1:7780 steamos@frame.local)
+live/ft-live --bind 0.0.0.0   # reachable from the network
+live/ft-live --once           # print the state once as JSON
+```
+
+It runs on the host, from a terminal in the Frametop desktop or over SSH (then it borrows
+the session's D-Bus from ft-floatd). Frametop Display Settings' preview shows the planned
+layout instead: what Arrange now would do, without floating windows or the pointer.
+
 ## Displays off and sleep
 
 SteamVR turns the displays off a few seconds after the headset's proximity sensor says it came off. A stand or display mount that covers the sensor makes the headset seem worn, so its displays stay on, and Steam, which then counts someone as present, never puts it to sleep either.
