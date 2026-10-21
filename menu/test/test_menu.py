@@ -23,6 +23,7 @@ TEMPLATES = {
     "input-settings/ft-input-settings.desktop": "settings",
     "remote-displays/ft-remote-displays.desktop": "settings",
     "remote/ft-remote-settings.desktop": "settings",
+    "live/ft-live.desktop": "settings",
     "display-settings/ft-layout-reset.desktop": "screens",
     "display-settings/ft-screens-toggle.desktop": "screens",
     "tour/ft-tour.desktop": "help",
