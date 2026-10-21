@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frametop live view</title>
+<style>
+  :root {
+    --bg: #fafafa; --fg: #232629; --dim: #7f8c8d; --line: #bdc3c7; --panel: #3daee9; --float: #e67e22;
+    --window: rgba(35, 38, 41, 0.08); --active: #27ae60; --cursor: #da4453; --head: #232629;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1e20; --fg: #eff0f1; --dim: #95a5a6; --line: #4d4d4d; --panel: #3daee9; --float: #f39c12;
+      --window: rgba(239, 240, 241, 0.1); --active: #2ecc71; --cursor: #ed1515; --head: #eff0f1;
+    }
+  }
+  html { background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  body { margin: 0; padding: 12px 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 14px 0 4px; color: var(--dim); font-weight: 600; }
+  #status { color: var(--dim); min-height: 1.4em; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; }
+  .view { flex: 1 1 320px; min-width: 0; }
+  canvas { width: 100%; display: block; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 2px 8px 2px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.cap { white-space: normal; }
+  .float { color: var(--float); } .screen { color: var(--panel); } .active { color: var(--active); font-weight: 600; }
+  .dim { color: var(--dim); }
+</style>
+</head>
+<body>
+<h1>Frametop live view</h1>
+<div id="status">connecting…</div>
+<div class="row">
+  <div class="view"><h2>Room, from above (you are the dot; forward is up)</h2><canvas id="above" height="320"></canvas></div>
+  <div class="view"><h2>Room, from the front (x and height; panels as if facing you)</h2><canvas id="front" height="320"></canvas></div>
+</div>
+<h2>Panels and their windows (KWin outputs; the pointer is the red cross)</h2>
+<canvas id="panels" height="360"></canvas>
+<h2>Windows</h2>
+<table id="windows"><thead><tr><th>Panel</th><th>Window</th><th>Class</th><th>Frame (x, y, w × h)</th><th>State</th></tr></thead><tbody></tbody></table>
+<script>
+"use strict";
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const $ = id => document.getElementById(id);
+
+function prepare(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  if (!canvas.dataset.h) canvas.dataset.h = canvas.getAttribute("height");  // the CSS height, kept across redraws
+  const w = canvas.clientWidth, h = parseInt(canvas.dataset.h);
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.lineCap = "round";
+  return [ctx, w, h];
+}
+const add = (a, b, k) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+function label(p) { return p.kind === "float" ? `${p.n} ${p.title || "floating"}` : `${p.n}`; }
+function colour(p) { return p.kind === "float" ? css("--float") : css("--panel"); }
+// Where the pointer is on panel p, in the room: the fraction across and down the panel.
+function cursorOn(p, cursor) {
+  if (!cursor.px || cursor.panel !== p.n || !p.centre) return null;
+  const u = cursor.px[0] / p.pixels[0] - 0.5, v = 0.5 - cursor.px[1] / p.pixels[1];
+  return add(add(p.centre, p.xaxis, u * p.metres), p.yaxis, v * p.height);
+}
+// A fit of points [[a, b], ...] into a w × h box with a margin: returns [x, y] => [px, py].
+function fit(points, w, h, margin, flipB) {
+  const as = points.map(p => p[0]), bs = points.map(p => p[1]);
+  const a0 = Math.min(...as), a1 = Math.max(...as), b0 = Math.min(...bs), b1 = Math.max(...bs);
+  const k = Math.min((w - 2 * margin) / Math.max(a1 - a0, 0.5), (h - 2 * margin) / Math.max(b1 - b0, 0.5));
+  const cx = w / 2 - (a0 + a1) / 2 * k, cy = h / 2 + (flipB ? 1 : -1) * (b0 + b1) / 2 * k;
+  return (a, b) => [cx + a * k, flipB ? cy - b * k : cy + b * k];
+}
+
+function drawAbove(state) {
+  const [ctx, w, h] = prepare($("above"));
+  const head = state.head, shown = state.panels.filter(p => p.enabled && p.centre);
+  const pts = [];
+  if (head) pts.push([head.x, -head.z]);
+  for (const p of shown) {
+    const a = add(p.centre, p.xaxis, -p.metres / 2), b = add(p.centre, p.xaxis, p.metres / 2);
+    pts.push([a[0], -a[2]], [b[0], -b[2]]);
+  }
+  if (!pts.length) return;
+  const P = fit(pts, w, h, 24, true);
+  for (const p of shown) {
+    const a = add(p.centre, p.xaxis, -p.metres / 2), b = add(p.centre, p.xaxis, p.metres / 2);
+    const A = P(a[0], -a[2]), B = P(b[0], -b[2]);
+    ctx.strokeStyle = colour(p);
+    // A tilted panel has depth from above: its outline, with its centre line thick.
+    const corners = [add(a, p.yaxis, p.height / 2), add(b, p.yaxis, p.height / 2), add(b, p.yaxis, -p.height / 2), add(a, p.yaxis, -p.height / 2)].map(c => P(c[0], -c[2]));
+    ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); corners.forEach((c, i) => i ? ctx.lineTo(c[0], c[1]) : ctx.moveTo(c[0], c[1])); ctx.closePath(); ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.setLineDash(p.hidden ? [4, 6] : []);
+    ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = css("--fg");
+    const C = P(p.centre[0], -p.centre[2]);
+    ctx.fillText(label(p), C[0] + 6, C[1] - 6);
+    const c = cursorOn(p, state.cursor);
+    if (c) { const D = P(c[0], -c[2]); ctx.fillStyle = css("--cursor"); ctx.beginPath(); ctx.arc(D[0], D[1], 5, 0, 2 * Math.PI); ctx.fill(); }
+  }
+  if (head) {
+    const H = P(head.x, -head.z), yaw = head.yaw * Math.PI / 180;
+    ctx.fillStyle = css("--head");
+    ctx.beginPath(); ctx.arc(H[0], H[1], 5, 0, 2 * Math.PI); ctx.fill();
+    // SteamVR's yaw turns about y; facing -z at 0, and a positive yaw turns toward -x.
+    ctx.strokeStyle = css("--head"); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(H[0], H[1]); ctx.lineTo(H[0] - Math.sin(yaw) * 18, H[1] - Math.cos(yaw) * 18); ctx.stroke();
+  }
+}
+
+function drawFront(state) {
+  const [ctx, w, h] = prepare($("front"));
+  const head = state.head, shown = state.panels.filter(p => p.enabled && p.centre);
+  const pts = [];
+  if (head) pts.push([head.x, head.y]);
+  for (const p of shown) pts.push([p.centre[0] - p.metres / 2, p.centre[1] - p.height / 2], [p.centre[0] + p.metres / 2, p.centre[1] + p.height / 2]);
+  pts.push([0, 0]);
+  if (!pts.length) return;
+  const P = fit(pts, w, h, 24, true);
+  // Floor line at y = 0.
+  ctx.strokeStyle = css("--line"); ctx.lineWidth = 1; ctx.setLineDash([2, 4]);
+  const F = P(0, 0); ctx.beginPath(); ctx.moveTo(0, F[1]); ctx.lineTo(w, F[1]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.lineWidth = 2;
+  for (const p of shown) {
+    const A = P(p.centre[0] - p.metres / 2, p.centre[1] + p.height / 2), B = P(p.centre[0] + p.metres / 2, p.centre[1] - p.height / 2);
+    ctx.strokeStyle = colour(p);
+    ctx.setLineDash(p.hidden ? [4, 6] : []);
+    ctx.strokeRect(A[0], A[1], B[0] - A[0], B[1] - A[1]);
+    ctx.setLineDash([]);
+    ctx.fillStyle = css("--fg");
+    ctx.fillText(label(p), A[0] + 4, A[1] + 14);
+    const c = cursorOn(p, state.cursor);
+    if (c) { const D = P(c[0], c[1]); ctx.fillStyle = css("--cursor"); ctx.beginPath(); ctx.arc(D[0], D[1], 5, 0, 2 * Math.PI); ctx.fill(); }
+  }
+  if (head) {
+    const H = P(head.x, head.y);
+    ctx.fillStyle = css("--head"); ctx.beginPath(); ctx.arc(H[0], H[1], 5, 0, 2 * Math.PI); ctx.fill();
+  }
+}
+
+function drawPanels(state) {
+  const [ctx, w, h] = prepare($("panels"));
+  const shown = state.panels.filter(p => p.enabled && p.rect);
+  if (!shown.length) return;
+  const gap = 16, top = 20;
+  const k = Math.min((w - gap * (shown.length + 1)) / shown.reduce((s, p) => s + p.pixels[0], 0),
+                     (h - top - gap) / Math.max(...shown.map(p => p.pixels[1])));
+  let x = gap;
+  const byZ = state.windows.slice().sort((a, b) => a.z - b.z);
+  for (const p of shown) {
+    const pw = p.pixels[0] * k, ph = p.pixels[1] * k, y = top;
+    ctx.strokeStyle = colour(p); ctx.lineWidth = 2;
+    ctx.setLineDash(p.hidden ? [4, 6] : []);
+    ctx.strokeRect(x, y, pw, ph);
+    ctx.setLineDash([]);
+    ctx.fillStyle = css("--fg");
+    ctx.fillText(`${label(p)}  ${p.output}  ${p.pixels[0]}×${p.pixels[1]}${p.metres ? `  ${p.metres.toFixed(2)} m` : ""}${p.hidden ? "  hidden" : ""}`, x, y - 6);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, pw, ph); ctx.clip();
+    for (const win of byZ) {
+      if (win.output !== p.output || win.minimized && win.kind !== "normal") continue;
+      const f = win.frame, s = p.scale * k;
+      const rx = x + (f.x - p.rect.x) * s, ry = y + (f.y - p.rect.y) * s, rw = f.w * s, rh = f.h * s;
+      const active = win.id === state.active;
+      ctx.lineWidth = win.kind === "popup" ? 1 : active ? 2 : 1.5;
+      ctx.strokeStyle = active ? css("--active") : win.kind === "dock" ? css("--dim") : css("--fg");
+      ctx.setLineDash(win.minimized ? [3, 4] : win.kind === "popup" ? [2, 2] : []);
+      if (!win.minimized && win.kind !== "popup") { ctx.fillStyle = css("--window"); ctx.fillRect(rx, ry, rw, rh); }
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.setLineDash([]);
+      if (win.kind !== "popup" && rh > 14 && rw > 30) {
+        ctx.fillStyle = active ? css("--active") : css("--fg");
+        ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+        ctx.fillText(win.caption + (win.minimized ? " (minimized)" : ""), rx + 4, ry + 13);
+        ctx.restore();
+      }
+    }
+    const c = state.cursor;
+    if (c.px && c.panel === p.n) {
+      const cx = x + c.px[0] * k, cy = y + c.px[1] * k;
+      ctx.strokeStyle = css("--cursor"); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
+    }
+    ctx.restore();
+    x += pw + gap;
+  }
+}
+
+function fillTable(state) {
+  const byPanel = {};
+  for (const p of state.panels) byPanel[p.output] = p;
+  const rows = state.windows.filter(w => w.kind !== "popup").sort((a, b) => (byPanel[a.output]?.n || 99) - (byPanel[b.output]?.n || 99) || b.z - a.z);
+  const esc = s => String(s).replace(/[&<>]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"})[c]);
+  $("windows").querySelector("tbody").innerHTML = rows.map(w => {
+    const p = byPanel[w.output], active = w.id === state.active;
+    const state_ = [active ? "active" : "", w.minimized ? "minimized" : "", w.fullScreen ? "full screen" : "",
+                    p && p.kind === "float" ? "floating" : "", w.kind !== "normal" ? w.kind : ""].filter(Boolean).join(", ");
+    return `<tr class="${active ? "active" : ""}"><td class="${p ? p.kind : ""}">${p ? label(p) : esc(w.output)}</td>` +
+           `<td class="cap">${esc(w.caption)}</td><td class="dim">${esc(w.cls)}</td>` +
+           `<td>${w.frame.x}, ${w.frame.y}, ${w.frame.w} × ${w.frame.h}</td><td class="dim">${state_}</td></tr>`;
+  }).join("");
+}
+
+function titles(state) {
+  // A floating panel is named after its window.
+  const caption = {};
+  for (const w of state.windows) caption[w.id] = w.caption;
+  for (const p of state.panels) if (p.window) p.title = (caption[p.window] || "").slice(0, 24);
+}
+
+function render(state) {
+  titles(state);
+  const head = state.head, c = state.cursor;
+  $("status").textContent = [
+    head ? `head ${head.x.toFixed(2)}, ${head.y.toFixed(2)}, ${head.z.toFixed(2)} m, yaw ${head.yaw.toFixed(0)}°` : "no head pose",
+    `${state.screens} screen${state.screens === 1 ? "" : "s"}, ${state.panels.filter(p => p.enabled && p.kind === "float").length} floating`,
+    c.px ? `pointer on panel ${c.panel} at ${Math.round(c.px[0])}, ${Math.round(c.px[1])} px (KWin ${c.x}, ${c.y})` : "pointer on no panel",
+    state.kwin_age === null ? "no KWin snapshot yet" : state.kwin_age > 5 ? `KWin snapshot ${state.kwin_age} s old` : ""
+  ].filter(Boolean).join("  ·  ");
+  drawAbove(state); drawFront(state); drawPanels(state); fillTable(state);
+}
+
+let last = null;
+async function tick() {
+  try {
+    const r = await fetch("state.json", {cache: "no-store"});
+    last = await r.json();
+    render(last);
+  } catch (e) {
+    $("status").textContent = "ft-live isn't answering: " + e;
+  }
+}
+window.addEventListener("resize", () => { if (last) render(last); });
+tick();
+setInterval(tick, 100);
+</script>
+</body>
+</html>

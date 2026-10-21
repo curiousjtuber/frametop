@@ -183,6 +183,25 @@ Moved to [reference-apps.md](reference-apps.md#frunner).
 
 Moved to [reference-apps.md](reference-apps.md#frametop-tour).
 
+## ft-live, the live view
+
+`live/ft-live` shows the desktop's arrangement as it is now, in a browser: the screens and
+floating panels in the room, from above and from the front, each panel's windows, and the
+pointer. It reads the panels' poses from ft-screens, the outputs, windows, and pointer from
+a KWin script it loads into the running desktop (`live/frametop-live.js`, unloaded when
+ft-live quits; it changes nothing in KWin), and which window floats where from ft-floatd.
+The page redraws ten times a second from `/state.json`, which is also there for scripts.
+
+```
+live/ft-live                  # http://127.0.0.1:7780/ (from a PC: ssh -L 7780:127.0.0.1:7780 steamos@frame.local)
+live/ft-live --bind 0.0.0.0   # reachable from the network
+live/ft-live --once           # print the state once as JSON
+```
+
+It runs on the host, from a terminal in the Frametop desktop or over SSH (then it borrows
+the session's D-Bus from ft-floatd). Frametop Display Settings' preview shows the planned
+layout instead: what Arrange now would do, without floating windows or the pointer.
+
 ## Displays off and sleep
 
 Moved to [reference-features.md](reference-features.md#displays-off-and-sleep).
