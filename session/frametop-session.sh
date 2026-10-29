@@ -32,6 +32,12 @@ for var in $(compgen -e); do
       XMODIFIERS | AT_SPI_BUS_ADDRESS) unset "$var" ;;
   esac
 done
+# The gamescope session also leaves XDG_SESSION_TYPE=x11 there, and SteamOS 0.5.6's
+# /etc/xdg/plasma-workspace/env/ibus.sh (steamdeck-kde-presets) sets the same variables to
+# ibus for an x11 session. startplasma sources the env scripts before it sets the type to
+# wayland for the desktop's apps, so with x11 still set every app ended up on IBus and the
+# keyboard never opened. This is a Wayland session; say so before startplasma runs.
+export XDG_SESSION_TYPE=wayland
 
 conf=$HOME/.config/frametop.conf
 BACKEND=screens SCREENS=2 WIDTH=1920 HEIGHT=1080 PHYS_WIDTH=1.6 REMOTE=0 FLOAT_SLOTS=16 FLOAT_MARGIN=300

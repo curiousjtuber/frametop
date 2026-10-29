@@ -88,7 +88,9 @@ PACKAGES = {
                 "its mic isn't silent after a reboot (SteamOS's echo-cancel chain)",
     "steamdeck-kde-presets": "Launch a program -> Native Desktop opens SteamOS's own desktop; starting "
                              "the desktop sends Steam no command line (no ExecCommandLine in "
-                             "~/.local/share/Steam/logs/console_log.txt)",
+                             "~/.local/share/Steam/logs/console_log.txt); Frametop's keyboard opens "
+                             "for a text field in a Qt app (3.8.3-13's plasma-workspace/env/ibus.sh "
+                             "puts the apps on IBus when XDG_SESSION_TYPE is x11)",
     "holo-cursors": "the desktop keeps its Breeze cursor (over remote access, and with the gamescope backend)",
     "xdg-desktop-portal": "Firefox or Chromium in the desktop shows minimize, maximize, and close, and dark "
                           "mode still follows the desktop (ft-gtksettings, the desktop's own portal folder)",
