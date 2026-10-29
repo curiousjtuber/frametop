@@ -182,7 +182,7 @@ reap() {
 }
 
 cleanup() {
-  [ -n "${watch_pid:-}" ] && kill "$watch_pid" 2>/dev/null || true  # the logout watcher below
+  [ -n "${watch_pids:-}" ] && kill $watch_pids 2>/dev/null || true  # the watchers below
   "$here/remote-ctl.sh" stop
   reap
   # Every FUSE mount below, not just our document portal: SteamOS's own desktop started from
@@ -513,7 +513,9 @@ python3 "$here/fix-panels.py" --screens "$screens" || true
 # started it, then waitpid sleeps until it exits: looking every 3 seconds for the whole
 # session cost about 1% of a core. The wrapper is matched from the start of its command
 # line, since pgrep -f alone also matches a shell whose command names it.
-ours() { [ "$(tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | sed -n 's/^XDG_RUNTIME_DIR=//p')" = "$XDG_RUNTIME_DIR" ]; }
+# (A process with file capabilities, like kwin_wayland, has an environ its owner can't read,
+# so it's never ours; check KWin through its wrapper.)
+ours() { [ "$(tr '\0' '\n' 2>/dev/null < "/proc/$1/environ" | sed -n 's/^XDG_RUNTIME_DIR=//p')" = "$XDG_RUNTIME_DIR" ]; }
 ours_pid() {
   local p
   for p in $(pgrep "$@"); do ours "$p" && { echo "$p"; return 0; }; done
@@ -534,6 +536,45 @@ logout_watch() {
   done
 }
 logout_watch &
-watch_pid=$!
+watch_pids=$!
+
+# The opposite can happen too: plasmashell alone exits (on 2026-10-28 on a Wayland protocol
+# error with its panel settings open; docs/design.md) while KWin, the session manager and
+# the bus stay, and nothing starts it again. Plasma starts its programs as plain processes
+# here, since it can't reach systemd from the session's bus, and plasmashell's own respawn
+# covers crashes, not a plain exit. So when this session's plasmashell is gone a few seconds
+# and its session manager and KWin are still up, start it again, from the session manager's
+# environment (the session's bus, wayland-0, DISPLAY and XDG_DATA_DIRS), as a child of this
+# script, so it stays in the desktop's cgroup. Not while the session manager is gone: that's
+# a logout, logout_watch's case. Three starts in a minute means it won't stay up, so stop.
+plasma_watch() {
+  local seen=0 gone=0 p t ksm kwin environ starts=() recent
+  while sleep 3; do
+    ksm=
+    for p in $(pgrep -x ksmserver); do ours "$p" && { ksm=$p; break; }; done
+    [ -n "$ksm" ] || continue  # not up yet, or logging out
+    for p in $(pgrep -x plasmashell); do ours "$p" && { seen=1; gone=0; continue 2; }; done
+    [ "$seen" = 1 ] || continue
+    gone=$((gone + 1))
+    [ "$gone" -ge 2 ] || continue  # about 6 seconds after it exited
+    kwin=
+    for p in $(pgrep -f '^/usr/bin/kwin_wayland_wrapper( |$)'); do ours "$p" && { kwin=$(pgrep -P "$p" -x kwin_wayland); break; }; done
+    [ -n "$kwin" ] || continue  # KWin went too: the session is ending, or its wrapper is restarting it
+    recent=()
+    for t in "${starts[@]}"; do [ $((SECONDS - t)) -lt 60 ] && recent+=("$t"); done
+    starts=("${recent[@]}")
+    if [ ${#starts[@]} -ge 3 ]; then
+      echo "frametop: plasmashell exited again after 3 starts in a minute; leaving it" >&2
+      return 0
+    fi
+    starts+=("$SECONDS")
+    gone=0
+    echo "frametop: plasmashell exited while the session stays; starting it again" >&2
+    mapfile -d '' environ < "/proc/$ksm/environ" || continue
+    env -i "${environ[@]}" /usr/bin/plasmashell &
+  done
+}
+plasma_watch &
+watch_pids="$watch_pids $!"
 
 dbus-run-session startplasma-wayland

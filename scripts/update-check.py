@@ -71,7 +71,10 @@ PACKAGES = {
             "logout watcher ends it: if it no longer crashes, the watcher can go)",
     "plasma-workspace": "the taskbar and panels after a desktop restart; no DiscoverNotifier or "
                         "ibus-daemon inside the desktop; a notification in the desktop shows in the "
-                        "Steam session and its buttons work (ft-notifyfwd)",
+                        "Steam session and its buttons work (ft-notifyfwd); the panels come back within "
+                        "about ten seconds of `pkill -x plasmashell` in the desktop (the session's "
+                        "plasmashell watcher; 6.2.5's plasmashell exited on a Wayland protocol error "
+                        "with a panel's settings open)",
     "at-spi2-core": "an AT-SPI-aware app appears on the nested desktop's accessibility bus; "
                     "the registry stops and comes back after a desktop restart",
     "gamescope": "the headset's volume buttons with nothing focused; typing goes where you last clicked; "
