@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Install the hand recorder on a Frame that has Frametop (get.sh --experimental): bring the dev
-# container's packages up to date, build hand tracking's camera broker and tracker (hands/build.sh:
+# Install the hand recorder on a Frame that has Frametop (get.sh --experimental): install
+# Frametop's Python runtime (pack/flatpak/install.sh, the Flatpak the recorder runs in), build
+# hand tracking's camera broker and tracker (hands/build.sh:
 # the first build fetches and builds ncnn, a few minutes) and the headset panel (hands/rec/build.sh),
 # give ft-camd its capabilities (hands/run.sh caps: asks for the password, once per build), and add
 # "Frametop Hand Recorder" to the app menu (for Frametop's desktop: it isn't tested from SteamVR's
 # "Launch a program", which runs apps outside it; the standalone recorder is for that).
 # It doesn't turn on Frametop's live hand tracking (that's hands/run.sh install, which install.sh offers).
-# A release (FRAME_RELEASE) brings the three built in its image (pack/Containerfile), so there it only
+# A release (FRAME_RELEASE) brings the three built (pack/Containerfile), so there it only
 # sets the capabilities and adds the menu entry; its install.sh offers this.
 # Usage: hands/rec/install.sh            install or update
 #        hands/rec/install.sh uninstall  remove the menu entry, and ft-camd's capabilities unless
@@ -24,8 +25,8 @@ case ${1:-install} in
     if [ "$FRAME_RELEASE" = 1 ]; then
       echo "== ft-camd's capabilities (asks for your password, unless it has them) and the menu entry"
     else
-      echo "== 1/4 dev container packages"
-      "$root/setup/dev-container.sh"
+      echo "== 1/4 Frametop's Python runtime (the Flatpak the recorder runs in)"
+      on_frame 'pack/flatpak/install.sh'
       echo "== 2/4 hand tracking: ft-camd and ft-hands"
       "$root/hands/build.sh"
       echo "== 3/4 the headset panel: ft-handpanel"

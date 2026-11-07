@@ -8,12 +8,12 @@ PartOf=frametop-voice.service
 
 [Service]
 ExecStartPre=-/usr/bin/pkill -x whisper-server
-# In the container, outside this unit's cgroup, so Nice= wouldn't reach it: nice does. The
-# Gamescope WSI layer asserts on compute-only Vulkan devices, and whisper needs no swapchain.
-# voice/whisper-run picks the model the settings choose.
-ExecStart=@REPO@/scripts/in-box env DISABLE_GAMESCOPE_WSI=1 nice -n 5 @REPO@/voice/whisper-run \
-  --host 127.0.0.1 --port 8178 -t 3 -fa
-ExecStopPost=-/usr/bin/pkill -x whisper-server
+# Built for the host (voice/build.sh), so it runs directly. The Gamescope WSI layer asserts
+# on compute-only Vulkan devices, and whisper needs no swapchain. voice/whisper-run picks the
+# model the settings choose.
+Environment=DISABLE_GAMESCOPE_WSI=1
+Nice=5
+ExecStart=@REPO@/voice/whisper-run --host 127.0.0.1 --port 8178 -t 3 -fa
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=5

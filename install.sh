@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Install everything on the Steam Frame: the build container, Frametop (multi-screen
-# desktop, input relay, universal 3D mouse, settings app), and optionally voice dictation,
-# hand tracking, gaze mode, our own eye tracker for it, and the Bluetooth fixes. Run it on the
-# headset in a terminal, from this repo. It's safe to re-run, for example after `git pull`.
+# Install everything on the Steam Frame: Frametop's Python runtime (a Flatpak), Frametop
+# (multi-screen desktop, input relay, universal 3D mouse, settings apps), and optionally voice
+# dictation, hand tracking, gaze mode, our own eye tracker for it, and the Bluetooth fixes. The
+# programs are built on the host, with its own toolchain (pack/host-and-flatpak.md). Run it on
+# the headset in a terminal, from this repo. It's safe to re-run, for example after `git pull`.
 # (It also works from a PC over SSH; see "Developing from a PC" in the README.)
-# In a release (pack/install-release.sh), the programs come built from its image: this installs the
-# distrobox the release brings, makes the release's container from its image, and builds nothing.
+# In a release (pack/install-release.sh), the programs come built, with the Flatpak as a bundle
+# next to them: this builds nothing.
 #
 # Usage: ./install.sh [--yes] [--no-voice] [--no-hands] [--no-hand-recorder] [--no-eye-tracker]
 #                    [--no-eye-recorder] [--no-bluetooth | --bluetooth]
@@ -64,7 +65,7 @@ sudo_quiet() {
   grep -q '^steamos_root_pwd=.' "$REPO_ROOT/.env" 2>/dev/null && return 0
   on_frame 'sudo -n true' 2>/dev/null
 }
-# A release never builds (FRAME_RELEASE, scripts/_env.sh): its programs come in its image.
+# A release never builds (FRAME_RELEASE, scripts/_env.sh): its programs come built.
 build() { [ "$FRAME_RELEASE" = 1 ] || "$@"; }
 # A part this install skips (or fails to install) can still have units from another Frametop
 # folder: the release before, or a clone. They'd go on running that folder's programs, and fail
@@ -103,51 +104,33 @@ if [ "$FRAME_LOCAL" = 0 ] || [ -n "${SSH_CONNECTION:-}" ]; then
   echo "that need SteamVR start with it if it isn't running now."
 fi
 
-step "1/12 distrobox (container tool, installed in your home folder)"
-if on_frame 'test -x ~/.local/bin/distrobox'; then
-  echo "already installed: $(on_frame '~/.local/bin/distrobox version | head -1')"
-elif [ "$FRAME_RELEASE" = 1 ]; then
-  # The release's image brings the distrobox it was tested with (pack/Containerfile).
-  on_frame 'cd pack/build/distrobox && ./install --prefix ~/.local'
-else
-  on_frame 'set -e; mkdir -p ~/dev/src
-# A tested release, so upstream changes cannot break new installs: 1.8.2.5, by its commit (the
-# one pack/Containerfile fetches).
-if [ ! -d ~/dev/src/distrobox ]; then
-  d=~/dev/src/distrobox.part.$$
-  git init -q $d
-  git -C $d fetch -q --depth 1 https://github.com/89luca89/distrobox.git 40c3cd724faa434aeb0a23e28776665b92de68bd
-  git -C $d checkout -q FETCH_HEAD
-  mv $d ~/dev/src/distrobox
-fi
-cd ~/dev/src/distrobox && ./install --prefix ~/.local'
-fi
-
+step "1/11 Frametop's Python runtime (a Flatpak: the settings apps, the Tour, the recorders, ft-eyes, ft-voiced)"
+# A release brings its bundle (pack/install-release.sh puts it in pack/flatpak/build); a
+# checkout installs the one built for its inputs, building it first when there's none (the
+# KDE runtime is a 1 GB download, once).
 if [ "$FRAME_RELEASE" = 1 ]; then
-  step "2/12 Frametop's container (from this release's image)"
-  "$root/pack/release-box.sh"
+  on_frame 'pack/flatpak/install.sh pack/flatpak/build/frametop.flatpak'
 else
-  step "2/12 build container (Fedora 44 'dev', about 1-2 GB the first time)"
-  "$root/setup/dev-container.sh"
+  on_frame 'pack/flatpak/install.sh'
 fi
 
-step "3/12 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
+step "2/11 input relay (keeps Bluetooth mice working in SteamVR, device roles, button maps)"
 "$root/desktops.sh" relay install
 
-step "4/12 3D mouse: SteamVR driver"
+step "3/11 3D mouse: SteamVR driver"
 build "$root/pointer/driver/build.sh"
 "$root/pointer/driver/install.sh" install
 
-step "5/12 3D mouse: pointer helper service, and the dashboard patch that lets it move SteamVR's windows"
+step "4/11 3D mouse: pointer helper service, and the dashboard patch that lets it move SteamVR's windows"
 build "$root/pointer/helper/build.sh"
 "$root/pointer/helper/run.sh" install
 "$root/pointer/dashpatch/run.sh" install
 
-step "6/12 power service (turns the displays off while the headset isn't used, even on a stand)"
+step "5/11 power service (turns the displays off while the headset isn't used, even on a stand)"
 build "$root/power/build.sh"
 "$root/power/run.sh" install
 
-step "7/12 multi-screen desktop (ft-screens), its keyboard (Full Keyboard), Frametop Input Settings, Display Settings, Remote Displays, and the Tour"
+step "6/11 multi-screen desktop (ft-screens), its keyboard (Full Keyboard), Frametop Input Settings, Display Settings, Remote Displays, and the Tour"
 build "$root/screens/build.sh"
 build "$root/layout/countdown/build.sh"  # visible three-second reset countdown
 build "$root/stream/build.sh"  # ft-stream: remote displays (Frametop Remote Displays)
@@ -164,7 +147,7 @@ on_frame "sed -i 's/^POINTER=0/POINTER=1/' ~/.config/frametop.conf; grep -q '^PO
 echo "the launcher's Desktop entry now opens the multi-screen desktop; 3D mouse on (POINTER=1 in ~/.config/frametop.conf)"
 "$root/scripts/conf-migrate.sh"
 
-step "8/12 voice dictation (optional: speak, and it's typed where you type; nothing leaves the headset)"
+step "7/11 voice dictation (optional: speak, and it's typed where you type; nothing leaves the headset)"
 voice_units="frametop-voice.service frametop-voice-whisper.service"
 if [ "$voice" = 0 ]; then
   echo "skipped (--no-voice). Install later with: voice/run.sh install"
@@ -183,7 +166,7 @@ fi
 # Hand tracking needs sudo once per build of ft-camd, its camera broker (file capabilities to
 # borrow XRService's camera buffers). Installed, it runs with the Frametop desktop
 # (HANDS_MODE=frametop), unless the settings already pick always.
-step "9/12 hand tracking (optional, experimental: your hands work the screens; it uses a lot of the headset's CPU)"
+step "8/11 hand tracking (optional, experimental: your hands work the screens; it uses a lot of the headset's CPU)"
 hand_units="frametop-camd.service frametop-hands.service frametop-handview.service"
 hands_done=0
 if [ "$hands" = 0 ]; then
@@ -236,7 +219,7 @@ if [ "$FRAME_RELEASE" = 1 ]; then
   fi
 fi
 
-step "10/12 gaze mode (optional, experimental: the pointer goes where you look)"
+step "9/11 gaze mode (optional, experimental: the pointer goes where you look)"
 gaze=0
 if ask "Install gaze mode? You turn it on and calibrate it in Frametop Input Settings, on the Gaze page." y; then
   "$root/gaze/run.sh" install
@@ -247,7 +230,7 @@ fi
 
 # Ours is gaze mode's default once it's installed (GAZE_TRACKER=auto). Without it, gaze mode
 # uses SteamVR's eye tracker.
-step "11/12 our own eye tracker for gaze mode (recommended: more accurate than SteamVR's)"
+step "10/11 our own eye tracker for gaze mode (recommended: more accurate than SteamVR's)"
 if [ "$gaze" = 0 ]; then
   echo "skipped: gaze mode isn't installed. Install it later with: gaze/tracker/install.sh"
 elif [ "$eye_tracker" = 0 ]; then
@@ -296,7 +279,7 @@ if [ "$FRAME_RELEASE" = 1 ]; then
   fi
 fi
 
-step "12/12 Bluetooth fixes (optional; they let LE mice and keyboards like the Swiftpoint Z3 reconnect)"
+step "11/11 Bluetooth fixes (optional; they let LE mice and keyboards like the Swiftpoint Z3 reconnect)"
 if [ "$bluetooth" = 2 ] && [ "$assume_yes" = 1 ] && ! sudo_quiet; then
   echo "skipped: they need your password (sudo), and --yes doesn't ask. Install later with: setup/bluetooth/install.sh install"
 elif [ "$bluetooth" = 2 ] || { [ "$bluetooth" = 1 ] && ask "Install the Bluetooth fixes? They need your password (sudo)." n; }; then

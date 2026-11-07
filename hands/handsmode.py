@@ -31,7 +31,7 @@ It also reads and writes the three hand input switches Frametop Input Settings s
 gaze clicks, the hand ray, direct touch), which are pointer and ft-screens settings, not services.
 
 On the host, system Python, standard library only (the settings app runs it through
-distrobox-host-exec, and imports it for the settings' defaults).
+flatpak-spawn, and imports it for the settings' defaults).
 """
 import json
 import os

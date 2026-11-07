@@ -6,14 +6,13 @@ Documentation=file://@REPO@/voice/README.md
 After=pipewire.service wireplumber.service frametop-input-relay.service
 
 [Service]
-# Runs in the container it was built in (scripts/in-box), named ft-voiced there. Clean up the
-# process explicitly around it: in the container, it isn't in this unit's cgroup.
+# Runs in Frametop's Python runtime, the Flatpak with its sherpa-onnx (scripts/ft-python,
+# pack/flatpak), named ft-voiced there; the sandbox's processes are in this unit's cgroup, so
+# the stop reaches them.
 ExecStartPre=-/usr/bin/pkill -x ft-voiced
-ExecStart=@REPO@/scripts/in-box @REPO@/voice/build/venv/bin/python @REPO@/voice/ft-voiced
-ExecStopPost=-/usr/bin/pkill -x ft-voiced
+ExecStart=@REPO@/scripts/ft-python @REPO@/voice/ft-voiced
 Restart=on-failure
 RestartSec=3
-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
 TimeoutStopSec=5
 
 [Install]

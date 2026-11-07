@@ -69,10 +69,11 @@ SOCKET_PATH = RUNTIME_DIR / "control.sock"
 RELAY = "\0frametop_relay"  # the input relay: it types ("type TEXT")
 VOICE = "\0frametop_voice"  # push-to-talk from the relay
 TYPE_CHUNK = 2000  # bytes of text per "type" datagram, at most
-# Programs started for voice commands and hooks run on the host: in the container they'd miss
-# the host's tools. distrobox-host-exec passes no environment, so it goes through env there.
-IN_BOX = Path("/run/.containerenv").exists() and shutil.which("distrobox-host-exec") is not None
-HOST = ["distrobox-host-exec"] if IN_BOX else []
+# Programs started for voice commands and hooks run on the host: in the sandbox (Frametop's
+# Python runtime, a Flatpak: scripts/ft-python) they'd miss the host's tools. flatpak-spawn
+# runs them outside, through the portal on the user's session bus, with env(1) for the
+# environment. pw-record and pw-play run in here, on the host's PipeWire (the socket is in).
+HOST = ["flatpak-spawn", "--host"] if Path("/.flatpak-info").exists() else []
 # Audio kept before speech that starts after a silence: the VAD flags speech ~0.27 s late.
 LEAD_IN_SECONDS = 0.5
 # Committed words a window's decode is lined up against: more than its context can hold.

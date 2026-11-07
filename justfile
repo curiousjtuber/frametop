@@ -8,31 +8,54 @@ default:
     @just --list
 
 # everything, strict (the recipes are the source of truth)
-test: lint test-python test-c test-keyboard test-bash test-testbench test-fast-install
+test: lint test-python test-c test-keyboard test-bash test-testbench test-fast-install test-kde
+
+# The suites that need KDE (PySide6 and Kirigami, kwriteconfig6): they run in Frametop's
+# Python runtime, the Flatpak (test-kde), not here. Patterns for testgate: test-python leaves
+# them out with a leading !, test-kde runs them.
+kde_tests := "'commands/test/test_settings_page.py' 'input-settings/test/test_hands_page.py' 'input-settings/test/test_ignore.py' 'input-settings/test/test_rules_file.py' 'input-settings/test/test_travel_page.py' 'input-settings/test/test_qml_backend.py' 'recorder/tests/test_one_window.py' 'recorder/tests/test_welcome_page.py' 'recorder/tests/test_stay_awake.py' 'recorder/tests/test_window_pipes.py' 'gaze/bench/tests/test_bench.py' 'gaze/rec/tests/test_qml_backend.py' 'hands/rec/tests/test_qml_backend.py' 'hands/rec/tests/test_free_space.py' 'hands/rec/tests/test_export_queue.py' 'hands/rec/tests/test_upload_during_export.py' 'voice/test/test_settings_page.py' 'display-settings/tests/test_pin_mode.py' 'display-settings/tests/test_stereo_wallpaper.py' 'scripts/tests/test_app_imports.py'"
 
 # the Python suites as a strict gate: every failure fails the run. The image's
-# python3 has to import the dnf Qt stack and the locked packages together;
-# without that check the Qt tests would only skip. scripts/testgate/testgate.py
-# runs each file and fails a pattern that matches nothing; a skipped file or
-# test is reported as skipped, with its reason, never as ok.
+# python3 is the venv's, with the locked numpy, OpenCV, ncnn and sherpa-onnx;
+# without that check the tracker and voice tests would only skip.
+# scripts/testgate/testgate.py runs each file and fails a pattern that matches
+# nothing; a skipped file or test is reported as skipped, with its reason, never
+# as ok. The KDE suites (kde_tests) are left out here: test-kde.
 test-python:
     #!/usr/bin/env bash
     set -uo pipefail
-    python3 -c 'import PySide6, numpy, cv2, sherpa_onnx' || { echo "python3 can't import PySide6, numpy, cv2, and sherpa_onnx"; exit 1; }
+    python3 -c 'import numpy, cv2, ncnn, sherpa_onnx' || { echo "python3 can't import numpy, cv2, ncnn and sherpa_onnx"; exit 1; }
     status=0
     layout/countdown/deps.sh || status=1
+    left_out=({{kde_tests}})
     python3 scripts/testgate/testgate.py 'scripts/testgate/tests/*.py' 'conf/test/*.py' 'layout/tests/*.py' \
         'layout/countdown/tests/test_*.py' 'models/test/*.py' 'commands/test/*.py' 'input-settings/test/*.py' \
         'input/test/*.py' 'hands/tests/test_*.py' 'hands/rec/tests/*.py' 'recorder/tests/*.py' 'gaze/test/*.py' \
         'gaze/rec/tests/*.py' 'gaze/bench/tests/test_*.py' 'pack/test/*.py' 'voice/test/*.py' 'frunner/test/*.py' \
         'tour/test/*.py' 'menu/test/*.py' 'float/test/*.py' 'display-settings/tests/*.py' 'pointer/tests/*.py' \
-        'scripts/tests/test_app_imports.py' \
         'scripts/tests/test_uninstall.py' 'scripts/tests/test_get.py' 'scripts/tests/test_install_lib.py' \
-        'scripts/tests/test_conf_readers.py' 'scripts/tests/test_install_interrupt.py' 'docs/tests/*.py' || status=1
-    pytest -q session/tests || status=1
+        'scripts/tests/test_conf_readers.py' 'scripts/tests/test_install_interrupt.py' 'scripts/tests/test_glibc_compat.py' \
+        'docs/tests/*.py' "${left_out[@]/#/!}" || status=1
     # test_accessibility.py needs the host's AT-SPI and PyGObject, test_notifyfwd.py and
     # test_gtksettings.py the host's dbus-daemon and PyGObject
     echo "session/test/*.py: SKIPPED: they need the host's AT-SPI, dbus-daemon and PyGObject (run them on the Frame)"
+    exit $status
+
+# the suites that need KDE, in Frametop's Python runtime, the Flatpak (scripts/ft-python;
+# it has pytest for this): the settings apps' and recorders' Qt tests (kde_tests) and
+# session/tests (kwriteconfig6). On the Frame, and in CI after the Flatpak is built
+# (release.yml). Where the Flatpak isn't installed (the image, a PC) it says so and passes.
+test-kde:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    if ! scripts/ft-python --check >/dev/null 2>&1; then
+        echo "test-kde: SKIPPED: Frametop's Python runtime isn't installed here (pack/flatpak/install.sh)"
+        exit 0
+    fi
+    status=0
+    export QT_QPA_PLATFORM=offscreen
+    scripts/ft-python scripts/testgate/testgate.py {{kde_tests}} || status=1
+    scripts/ft-python -m pytest -q -p no:cacheprovider session/tests || status=1
     exit $status
 
 # the C/C++ unit tests, built into build/tests: header-only logic with made-up

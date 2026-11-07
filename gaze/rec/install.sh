@@ -23,9 +23,9 @@ case ${1:-install} in
     if [ "$FRAME_RELEASE" = 1 ]; then
       echo "== the menu entry"
     else
-      echo "== 1/3 dev container packages"
-      "$root/setup/dev-container.sh"
-      echo "== 2/3 the gaze tools: ft-gaze, ft-gazepanel and ft-eyes"
+      echo "== 1/3 Frametop's Python runtime (the Flatpak the recorder and ft-eyes run in)"
+      on_frame 'pack/flatpak/install.sh'
+      echo "== 2/3 the gaze tools: ft-gaze, ft-gazepanel and ft-eyes' frame grabber"
       "$root/gaze/build.sh"
       "$root/gaze/tracker/build.sh"
       echo "== 3/3 the menu entry"

@@ -5,7 +5,6 @@ Standard library only: the recorders run it in the dev container and, standalone
 import glob
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -46,23 +45,23 @@ def clock_sample():
 
 
 def in_container():
-    return os.path.exists("/run/.containerenv") or os.path.exists("/.dockerenv")
+    """In Frametop's Python runtime, a Flatpak (scripts/ft-python), or another sandbox."""
+    return os.path.exists("/.flatpak-info") or os.path.exists("/run/.containerenv") or os.path.exists("/.dockerenv")
 
 
 def host_command(*cmd):
-    """argv to run a command on the SteamOS host from the dev container (as in
-    display-settings: distrobox-host-exec needs the user's real session bus). It runs from the
-    home folder: host-spawn starts the command in the caller's folder, and a container-only
-    one such as /run/host/tmp doesn't exist on the host (every command then exits 127)."""
-    exe = shutil.which("distrobox-host-exec")
-    if not in_container() or not exe:
+    """argv to run a command on the SteamOS host from the Flatpak (as in display-settings:
+    flatpak-spawn, through the portal on the user's real session bus, which the command gets
+    too). It runs from the home folder: the portal starts the command in the caller's folder,
+    and one only the sandbox has doesn't exist on the host (every command then exits 127)."""
+    if not os.path.exists("/.flatpak-info"):
         return list(cmd)
-    return ["env", "-C", os.path.expanduser("~"), "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%d/bus" % os.getuid(),
-            exe] + list(cmd)
+    return ["flatpak-spawn", "--host", "env", "-C", os.path.expanduser("~"),
+            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%d/bus" % os.getuid()] + list(cmd)
 
 
 def host_path(path):
-    """A host file, from the container (/run/host) or the host itself."""
+    """A host file, from the sandbox (/run/host) or the host itself."""
     for p in ("/run/host" + path, path):
         if os.path.exists(p):
             return p

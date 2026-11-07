@@ -93,8 +93,8 @@ class Camera:
 
 
 def device_path(path):
-    """A headset file such as /persist/xrservice.json. In the dev container the host's / is
-    at /run/host (distrobox doesn't mount /persist); off the Frame, FRAME_JOB_DEVICE_ROOT can
+    """A headset file such as /persist/xrservice.json. In Frametop's Flatpak the host's /etc is
+    at /run/host/etc and /persist is mounted read-only; off the Frame, FRAME_JOB_DEVICE_ROOT can
     point at a folder with copies of them."""
     root = os.environ.get('FRAME_JOB_DEVICE_ROOT')
     if root:

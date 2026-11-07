@@ -54,7 +54,6 @@ import functools
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -79,6 +78,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAZE_PROBE = os.path.join(REPO, "gaze", "probe", "ft-gazeprobe")
 # Hand tracking's mode and the cutouts' margin (standard library only, so it imports here too).
 sys.path.insert(0, os.path.join(REPO, "conf"))
+from fthost import host_command  # noqa: E402  (commands on the SteamOS host)
 import ft_conf  # noqa: E402  (frametop.conf's grammar, docs/config.md)
 import ft_store  # noqa: E402  (Frametop's JSON files, read and written safely)
 # GAZE_ACTIONS: gaze mode is a mouse and keyboard feature (docs/gaze-controllers.md).
@@ -392,8 +392,8 @@ def key_bindings(rules):
 # The gaze service's settings (gaze/ft-gazed): whose eye tracking, and the eye bias. GAZE_TRACKER
 # can also be auto (the default): ours when it's installed, else SteamVR's.
 GAZE_TRACKERS = {"steam": "SteamVR's eye tracker", "own": "our own eye tracker"}
-# Our tracker's frame grabber (gaze/tracker/install.sh), on the host: this runs in the dev
-# container, which has the host's /etc under /run/host.
+# Our tracker's frame grabber (gaze/tracker/install.sh), on the host: this runs in Frametop's
+# Flatpak, which has the host's /etc under /run/host.
 EYEGRAB = ("/etc/frametop/ft-eyegrab", "/run/host/etc/frametop/ft-eyegrab")
 GAZE_EYES = {"auto": "auto", "left": "left eye", "right": "right eye"}
 # Pointer settings: key, label, default, min, max, step, unit.
@@ -434,11 +434,16 @@ def keys_name(codes):
     return "+".join(MODIFIER_NAMES.get(c) or names.get(c, f"code {c}").removeprefix("KEY_").title() for c in codes)
 
 
+# The kernel's key names: the host's header, or the copy Frametop's Flatpak keeps (its runtime
+# has no kernel headers; pack/flatpak's manifest installs the SDK's).
+CODES_HEADERS = ("/usr/include/linux/input-event-codes.h", "/app/include/linux/input-event-codes.h")
+
+
 def code_names():
     """evdev key/button code -> name, from the kernel header (first name wins, BTN_ for buttons)."""
     names = {}
     try:
-        with open("/usr/include/linux/input-event-codes.h") as f:
+        with open(next((p for p in CODES_HEADERS if os.path.exists(p)), CODES_HEADERS[0])) as f:
             for m in re.finditer(r"#define\s+((?:KEY|BTN)_\w+)\s+(0x[0-9a-fA-F]+|\d+)", f.read()):
                 code = int(m.group(2), 0)
                 name = m.group(1)
@@ -461,15 +466,12 @@ def write_conf_value(key, value):
 
 
 def host(*cmd, timeout=20):
-    """Run a command on the SteamOS host (we live in the dev container), on the host's user
-    bus. The app itself has the bus of the session it was opened from (ft-input-settings),
-    in the Frametop desktop a private one from dbus-run-session; distrobox-host-exec run on
-    that one leaves `systemctl --user` on the host without its user manager ("Failed to
-    connect to user scope bus via local transport")."""
-    runner = ["distrobox-host-exec"] if shutil.which("distrobox-host-exec") else []
-    env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS=f"unix:path=/run/user/{os.getuid()}/bus")
+    """Run a command on the SteamOS host (we live in Frametop's Python runtime, a Flatpak:
+    fthost.host_command, flatpak-spawn on the host's user bus). The app itself has the bus of
+    the session it was opened from (ft-input-settings), in the Frametop desktop a private one
+    from dbus-run-session, where `systemctl --user` would be without its user manager."""
     try:
-        return subprocess.run(runner + list(cmd), capture_output=True, text=True, timeout=timeout, env=env)
+        return subprocess.run(host_command(*cmd), capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
@@ -1810,11 +1812,14 @@ class Backend(QObject):
         self._open_probe([], "Opening the gaze probe (a development tool)")
 
     def _open_probe(self, args, done):
-        runner = ["distrobox-host-exec"] if shutil.which("distrobox-host-exec") else []
-        env = [f"{k}={os.environ[k]}" for k in ("WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS")
-               if os.environ.get(k)]
+        # A window in the Frametop desktop: the session's socket and bus, which ft-python
+        # hands us as FT_HOST_* (inside the sandbox, ours are the sandbox's own).
+        env = {k: os.environ.get("FT_HOST_" + k) or os.environ.get(k)
+               for k in ("WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
+        env.update({k: os.environ[k] for k in ("DISPLAY", "XAUTHORITY") if os.environ.get(k)})
+        argv = host_command("env", *[f"{k}={v}" for k, v in env.items() if v], GAZE_PROBE, *args)
         try:
-            subprocess.Popen(runner + ["env"] + env + [GAZE_PROBE] + args, stdin=subprocess.DEVNULL,
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             self.message.emit(done, False)
         except OSError as e:

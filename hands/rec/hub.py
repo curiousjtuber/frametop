@@ -2,8 +2,8 @@
 """Upload a hand recorder export to the hand dataset on Hugging Face (DESIGN.md "Upload").
 
 The window runs this as a child process (so Cancel can end it, and huggingface_hub stays out
-of the window's process); it also runs from the command line. It uses huggingface_hub (in the
-dev container: python3-huggingface-hub, from setup/dev-container.sh) with the login that
+of the window's process); it also runs from the command line. It uses huggingface_hub (in
+Frametop's Python runtime, from uv.lock: pack/flatpak) with the login that
 `hub.py login` (the window's Log in) or `hf auth login` saved. Nobody types a token anywhere.
 
 `login` is huggingface_hub's browser login (OAuth device code, as `hf auth login` does): it gets a
@@ -264,7 +264,7 @@ def whoami():
 def login(progress=None):
     """The browser login (recorder/hub.py's login). Returns whoami()."""
     _hf()
-    return rhub.login(dataset_id(), progress, lambda: whoami(), "update the dev container (setup/dev-container.sh).")
+    return rhub.login(dataset_id(), progress, lambda: whoami(), "update Frametop's Python runtime (pack/flatpak/install.sh).")
 
 
 def upload(store, session, dry_run=False, again=False, progress=None, log=None):

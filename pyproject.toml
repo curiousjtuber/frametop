@@ -5,19 +5,25 @@ description = "Desktops in VR on the Steam Frame"
 readme = "README.md"
 requires-python = ">=3.12"
 
-# Frametop's Python dependencies, locked in uv.lock. The Frame's runtime apps
-# (input settings uses Kirigami) still come from the container's dnf packages;
-# these groups cover everything uv can pin: dev tooling and the hand tracker's
-# NumPy/OpenCV stack (Fedora's python3-opencv pulls in over a gigabyte).
+# Frametop's Python dependencies, locked in uv.lock. The Frame runs the Python
+# that needs more than the host's python3 in a Flatpak on KDE's runtime
+# (pack/flatpak, pack/host-and-flatpak.md): the apps group's PySide6 is the
+# runtime's Qt minor, with Kirigami and the desktop style coming from the
+# runtime itself, the tracker group is the eye and hand trackers' NumPy/OpenCV
+# stack, and the voice group Frametop Voice's. The build image installs the
+# dev, tracker and voice groups for the test gate.
 [dependency-groups]
+# Frametop Display Settings, Input Settings, Remote Displays, the Tour, the
+# recorders and the Gaze Bench
+apps = [
+    "PySide6-Essentials>=6.11,<6.12",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.14",
     "pyflakes>=3.4",
 ]
-# type checking is dev tooling outside the image: the image installs the
-# default groups (dev for CI's pytest/ruff, tracker for the hand tracker,
-# voice for Frametop Voice) but not this one
+# type checking is dev tooling outside the image and the Flatpak
 types = [
     "mypy>=1.19",
 ]
@@ -57,6 +63,9 @@ override-dependencies = ["opencv-python; sys_platform == 'never'"]
 # requires-python's floor (3.12), not the image's 3.14: the host-side scripts run on the
 # Frame's system Python, so syntax newer than 3.12 fails the lint.
 target-version = "py312"
+# Build outputs hold other projects' Python (whisper.cpp's scripts under voice/build): a
+# checkout the builds ran in is linted like a clean one.
+extend-exclude = ["build"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

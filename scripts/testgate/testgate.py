@@ -17,8 +17,10 @@ failed.
   ended too: SIGTERM, then SIGKILL a second later. A program a test starts in a session of its
   own (setsid) isn't in that group and isn't ended.
 - A failing file's output is shown; a passing one's isn't.
+- A pattern starting with ! takes the files it matches out of the run (the suites that need
+  KDE, which run in Frametop's Flatpak instead: justfile test-kde); it may match nothing.
 
-  scripts/testgate/testgate.py 'conf/test/*.py' 'layout/tests/test_*.py' ...
+  scripts/testgate/testgate.py 'conf/test/*.py' 'layout/tests/test_*.py' '!conf/test/test_qt.py' ...
 """
 import glob
 import json
@@ -155,13 +157,18 @@ def main(patterns):
     files = {"ok": 0, "skipped": 0, "failed": 0}
     tests = {"run": 0, "skipped": 0}
     status = 0
+    left_out = {f for p in patterns if p.startswith("!") for f in glob.glob(p[1:])}
     for pattern in patterns:
+        if pattern.startswith("!"):
+            continue
         matched = sorted(glob.glob(pattern))
         if not matched:
             print(f"{pattern}: FAILED, matches no file (a folder moved or renamed?)", flush=True)
             status = 1
             continue
         for path in matched:
+            if path in left_out:
+                continue
             how, ran, skipped, stdout, stderr = run(path)
             files[how] += 1
             tests["run"] += ran

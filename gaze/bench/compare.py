@@ -52,7 +52,7 @@ was (edge, corner or inside), by how far from straight ahead you looked, and by 
 the last nudge (run.json's last_lesson for the first).
 
 Needs numpy and (for the glint pairs) OpenCV: the tracker's Python, e.g.
-  scripts/in-box /opt/frametop/venv/bin/python gaze/bench/compare.py ~/.local/share/frametop/gaze/bench
+  scripts/ft-python gaze/bench/compare.py ~/.local/share/frametop/gaze/bench
 
 --fit-fusion OUT fits a gazecal.Fusion on all the clicks given (SteamVR's eyes' mean at each, and
 the target) and writes it to OUT, e.g. ~/.local/state/frametop/gaze/fusion.json for ft-gazed.
