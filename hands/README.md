@@ -12,7 +12,7 @@ It serves two things in Frametop:
 Two programs, each a user service that stops when SteamVR does:
 
 - `ft-camd` (`camd/`, C) borrows XRService's camera buffers and publishes the four IR tracking cameras' frames to a shared-memory ring. It runs on the host.
-- `ft-hands` (`track/`, C++) finds hands in those frames with MediaPipe's palm and landmark models on ncnn, triangulates them, and publishes them. It runs in the dev container.
+- `ft-hands` (`track/`, C++) finds hands in those frames with MediaPipe's palm and landmark models on ncnn, triangulates them, and publishes them. It runs on the host.
 
 `hands/run.sh install` builds them (a release brings them built), gives ft-camd its capabilities, installs both services, and links `hands/ft-handsctl` into `~/.local/bin`. `install.sh` runs it when you choose hand tracking, then sets `HANDS_MODE=frametop` unless it's `always`. When they run is `HANDS_MODE` in `~/.config/frametop.conf`, set on the Hands page of Frametop Input Settings or with `ft-handsctl mode`; `hands/handsmode.py` does the starting and stopping, for these two and the hand view (`frametop-handview.service`, when it's installed):
 
@@ -120,7 +120,7 @@ hands/build/ft-hands                  # status every 5 s; Ctrl+C to stop
 hands/build/ft-hands --int8           # the 8-bit models (models/ncnn/*-int8.ncnn.*)
 ```
 
-Run it in the dev container (`distrobox enter dev -- ...`). It reads the factory calibration from `/persist` (`/run/host/persist` in the container).
+Run it on the host. It reads the factory calibration from `/persist`.
 
 Options:
 
@@ -224,7 +224,7 @@ hands/build/ft-handreplay ~/.local/share/frametop/hands/rec-20260929-120000 --co
 
 ## Tools
 
-Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, because Fedora's `python3-opencv` pulls in over a gigabyte; in the dev container, run `sudo dnf install python3-numpy python3-opencv` once. Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
+Python, with NumPy and OpenCV: on the Frame, Frametop's Python runtime has them (`scripts/ft-python hands/tools/TOOL`). Off the Frame, `FRAME_JOB_DEVICE_ROOT` can point at a folder with copies of the headset's calibration files.
 
 - `tools/check_sides.py --ring` (or a recording, a sets file, `--pair upper`, `--calib DIR`, `--json`): are the side cameras named right, from the scene? ft-handreplay's `--sides file|0|1|auto` replays with DIR/sides.json's names (the default), as recorded, exchanged, or as auto decides, and reports what the side check found and when.
 - `tools/check_color.py REC`: how the colour module's calibration maps onto its images.
@@ -237,7 +237,7 @@ Python, with NumPy and OpenCV. `setup/dev-container.sh` doesn't install them, be
 - `tools/convert_models.py`: how `models/ncnn` was made from the OpenCV Zoo ONNX ports of MediaPipe's models (see `models/NOTICE`).
 - `models.sh`: fetches the fine-tuned models into `models/student` (`hands/build.sh` runs it, so source installs and the release image both get them): MediaPipe's two models retrained on the Frame's infrared cameras with the [Frametop Hands](https://huggingface.co/datasets/DeeJanuz/frametop-hands) dataset, from a fixed commit of [DeeJanuz/frametop-hands-models](https://huggingface.co/DeeJanuz/frametop-hands-models), each file checked against its SHA-256. They're licensed CC BY-NC 4.0 (non-commercial), not MIT, so they aren't in this repository; `models/student/LICENSE` and `README.md` come with them. `hands/models.pin` pins them: the commit, the version folder and every file's sum (frame-hands' `model-repo/pin.py` writes it); `hands/models.sh check` checks them against it. Installs don't need a release for a new version: when hand tracking starts, `frametop-hands.service` runs `hands/models.sh auto`, which reads `hands/models.pin` from GitHub (main for a stable release, experimental for an experimental one or a clone on that branch; at most every 15 minutes, within a minute) and, if it pins other models, fetches them into `models/.student-new`, checks every sum, and swaps that folder in whole. Offline, or anything not matching, it keeps the models it has. A pin only names the files above, and its `format` says which ft-hands it needs: raise it when a model needs a newer one, and installs without it keep theirs. `HANDS_MODELS_UPDATE=0` turns it off; `hands/models.sh update` checks now.
 
-To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s] [--matte circle|mesh|capsules] [--margin deg]` (built by `screens/build.sh`, run in the dev container, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens. Every 2 s it prints the composite's cost.
+To try the hand cutouts without restarting the desktop, `screens/build/ft-handtest [--distance m] [--width m] [--seconds s] [--matte circle|mesh|capsules] [--margin deg]` (built by `screens/build.sh`, run on the host, with hand tracking on) shows a test panel of its own, a light grid 1 m wide and 0.8 m ahead by default, and cuts your hands out of it the way ft-screens cuts them out of the screens. Every 2 s it prints the composite's cost.
 
 ## Hand cutouts and near input
 
@@ -253,7 +253,7 @@ Moved to [rendered-hands.md](rendered-hands.md#camera-check).
 
 ## Build
 
-`hands/build.sh` builds in the dev container on the Frame, into `hands/build/`, with `hands/Makefile`. The first build fetches ncnn's source at a pinned release (`NCNN_TAG` in the Makefile, its full-source zip checked by `NCNN_SHA256`) and builds it into `hands/build/ncnn`, which takes a few minutes; `NCNN=DIR` points at an ncnn install already built instead. ft-camd is linked statically, because it runs on the host, which has an older glibc than the container.
+`hands/build.sh` builds on the Frame host, into `hands/build/`, with `hands/Makefile`. The first build fetches ncnn's source at a pinned release (`NCNN_TAG` in the Makefile, its full-source zip checked by `NCNN_SHA256`) and builds it into `hands/build/ncnn`, which takes a few minutes; `NCNN=DIR` points at an ncnn install already built instead. ft-camd is linked statically, for its file capabilities; ft-hands and ncnn build with the glibc floor's pins (`scripts/host-glibc.sh`).
 
 ## Known issues
 

@@ -21,7 +21,7 @@ A hand holding a controller isn't drawn: the pointer helper sends ft-handview it
 **Room View** (`screens/roomview.h`): SteamVR has no public "is Room View on". In a VR game, the compositor's `VREvent_RoomViewShown` and `VREvent_RoomViewHidden` tell it; with no game, the construct shows Room View when `camera/enableConstructRoomView` is on (the default on the Frame). The passthrough shared state (`VR_CameraPassthroughState`, read only) has an `enabled` byte; it read 1 on 2026-10-09 and isn't yet known to follow the dashboard's Room View button, so only a 0 counts (off). `HANDS_ROOMVIEW=auto|on|off` in `~/.config/frametop.conf` forces it for both programs.
 
 ```
-screens/build/ft-handview [--status S] [--res PX] [--demo] [--seconds S]   # in the dev container (scripts/in-box)
+screens/build/ft-handview [--status S] [--res PX] [--demo] [--seconds S]   # on the host
 screens/build/ft-handview --snapshot /tmp/hands.png [--res PX] [--seconds S]   # offscreen, no SteamVR
 echo -n state | socat -t 1 - ABSTRACT-SENDTO:ft_handview,bind=   # the status line; also: roomview auto|on|off, model, style, inroom
 screens/tools/hand-asset.py   # handasset.cpp and .h from screens/assets/hands/*.glb (--cpp PATH: the data only, as the build does; --check: are they up to date)
@@ -36,7 +36,7 @@ Hand tracking needs all four mono cameras and the headset's IR light. With the A
 
 `hands/camcheck.py` (system Python, standard library) tells whether the four cameras run: `ok`, `degraded: upper cameras and IR light off (VCINT FPGA failed to load)` (or another `degraded:` reason), or `unknown` (SteamVR not running, the cameras closed while the headset sleeps). It prints the log lines and other evidence it used; `--json` is for programs; the exit status is 0, 1 or 2. It reads:
 - the running XRService's log (`~/.local/share/Steam/logs/xrservice.txt`): the last camera start (from the FPGA check to the next "Closing tracking camera interfaces"), its VCINT result, `Upper cameras FPGA interleaving support: N`, `Created N tasks (T tracking, P passthrough)` and the `TrackingCameraInit` lines. A wake that works prints no "Created N tasks", so an older one doesn't count;
-- which `/dev/video*` XRService has open (`/proc/PID/fd`; video9 and video13 are the side pair, video6 and video7 the upper pair). Only on the host: the dev container can't read another process's open files, so there it's skipped;
+- which `/dev/video*` XRService has open (`/proc/PID/fd`; video9 and video13 are the side pair, video6 and video7 the upper pair);
 - ft-camd's ring header, when it runs: how many mono cameras it publishes.
 
 The hand recorder runs it before a session (DESIGN.md, "Camera check"). `hands/tests/test_camcheck.py` runs it on the 2026-10-02 log cut at several points, and on made-up logs.
@@ -55,7 +55,7 @@ It logs every decision to the journal. `ft-camwatch --once` prints the state and
 Read from the code on the experimental branch, not tried live:
 - ft-screens quits when SteamVR does: on `VREvent_Quit` it ends its Wayland display (`screens/vr.cpp`, `ft_vr_poll`; `screens/compositor.c`, `handle_vr_event`). It never connects to SteamVR again: `ft_vr_init` runs once, at its start.
 - KWin runs nested in ft-screens, so the Frametop desktop ends with it, every window in it too (the hand recorder's as well). Its unit, `frametop-desktop`, is a transient `systemd-run` unit with `Restart=no`, so the desktop doesn't come back by itself: start it again (Desktop in the library, or `desktops.sh start`).
-- When the unit stops, systemd ends what's left in it. `session/keep-apps.sh` moves programs started in the desktop out of the unit first, but only `desktops.sh stop` runs it; here they stop too. Programs in the dev container (ft-screens, the hand recorder) are in the container's cgroup and end when their Wayland connection goes.
+- When the unit stops, systemd ends what's left in it. `session/keep-apps.sh` moves programs started in the desktop out of the unit first, but only `desktops.sh stop` runs it; here they stop too. The hand recorder's sandbox is in the unit's cgroup too, so it ends with it.
 - The units that are `PartOf=steamvr.service` restart with it: `frametop-camd`, `frametop-hands`, the pointer helper, gaze and power, and the hand recorder's own transient ft-camd and ft-hands units.
 
 ### Verified, and what's a guess

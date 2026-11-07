@@ -48,7 +48,7 @@ Scenarios live in `scenarios.json` (the generators are described at its top).
 ## Compare
 
 ```
-scripts/in-box /opt/frametop/venv/bin/python gaze/bench/compare.py ~/.local/share/frametop/gaze/bench
+scripts/ft-python gaze/bench/compare.py ~/.local/share/frametop/gaze/bench
 ```
 
 Give it runs, or the folder they're in. For every press it prints how far each technique was from
@@ -90,12 +90,12 @@ are yours to delete (the folder above).
 
 | File | |
 |---|---|
-| `gazebench.py`, `bench.qml` | the app and its window (PySide6, in Frametop's container); it runs its own `ft-gazepanel` |
+| `gazebench.py`, `bench.qml` | the app and its window (PySide6, in Frametop's Python runtime); it runs its own `ft-gazepanel` |
 | `benchrec.py` | the recording |
 | `scenarios.json` | the scenarios |
 | `compare.py` | the comparison (numpy, OpenCV) |
 | `ft-gazebench`, `ft-gazebench.desktop`, `install.sh` | the launcher and its menu entry |
 | `tests/` | `test_bench.py` (runs with stand-ins for ft-gaze, the panel, the button and the services), `test_compare.py` (a made-up run with known errors) |
 
-Tests: `scripts/in-box python3 gaze/bench/tests/test_bench.py`, and
-`scripts/in-box /opt/frametop/venv/bin/python gaze/bench/tests/test_compare.py`.
+Tests: `scripts/ft-python gaze/bench/tests/test_bench.py` (in the Flatpak: `just test-kde`), and
+`gaze/bench/tests/test_compare.py` (`just test-python`).

@@ -104,7 +104,7 @@ A command that starts with a set phrase can run a program. Add a `"commands"` li
 
 Matching works on whole words. A command matches when its words equal a phrase or start with it, so "Flag that." and "Flag that, fingers crossed." match "flag that", but "Flagging that" and "Please flag that" don't. If phrases of several entries match, the longest wins, then the first entry. The rest keeps your words as transcribed, without the punctuation that follows the phrase or a final period: the second example runs `ft-handsctl flag "fingers crossed"`.
 
-A matched command runs instead of `hooks/on-command`, on the host (through `distrobox-host-exec`, since ft-voiced runs in Frametop's container), as your user. The `command` event is still sent, with `"matched"` (the phrase) and `"ran"` (the argv) added. The program gets these environment variables (named as frame-voice named them, so programs written for it keep working):
+A matched command runs instead of `hooks/on-command`, on the host (through `flatpak-spawn --host`, since ft-voiced runs in Frametop's Python runtime, a Flatpak), as your user. The `command` event is still sent, with `"matched"` (the phrase) and `"ran"` (the argv) added. The program gets these environment variables (named as frame-voice named them, so programs written for it keep working):
 
 | Variable | Value |
 | --- | --- |
@@ -134,7 +134,7 @@ They apply when the service restarts (`voice/run.sh restart`). Wake phrase tunin
 
 | Part | What it does |
 | --- | --- |
-| `ft-voiced` | The service (`frametop-voice.service`): mic capture (`pw-record`), push-to-talk, the wake word, live text, the control socket. It runs in Frametop's container (`scripts/in-box`), named `ft-voiced` there. |
+| `ft-voiced` | The service (`frametop-voice.service`): mic capture (`pw-record`), push-to-talk, the wake word, live text, the control socket. It runs in Frametop's Python runtime, the Flatpak with its sherpa-onnx (`scripts/ft-python`), named `ft-voiced` there. |
 | `frametop-voice-whisper.service` | `whisper-server` (whisper.cpp, Vulkan on the Adreno 750) with the chosen model (`whisper-run`; `ggml-small.en-q5_1` by default) on `127.0.0.1:8178`, for wake word commands and languages other than English. ft-voiced starts it only while something uses it (it holds about 300 MB of the GPU's memory, more for large-v3-turbo) and stops it after. |
 | `ft-voice` | CLI for the control socket. |
 | `voice_settings.py` | The settings file, and carrying over frame-voice's. Standard library only: the installer runs it with the host's Python, and Input Settings reads it. |

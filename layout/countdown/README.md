@@ -18,12 +18,11 @@ commands remain immediate; use `ft-layout use NAME` to restore a full profile.
 layout/countdown/build.sh
 ```
 
-The recipe follows the other components: from a PC it syncs and builds in the
-Frame's dev container; on the Frame it builds in that container; `FRAME_IN_BOX=1`
-uses the current container for release-image builds. The binary is
-`layout/countdown/build/ft-reset-timer`, and `ft-layout` runs it through
-`scripts/in-box` when called on the host. The build's `--check` is offline and
-does not initialize OpenVR.
+The recipe follows the other components: from a PC it syncs and builds on the
+Frame host, or in the build image (`FRAME_IN_BOX=1`), within the glibc floor
+(`scripts/host-glibc.sh`). The binary is
+`layout/countdown/build/ft-reset-timer`, which `ft-layout` runs directly. The
+build's `--check` is offline and does not initialize OpenVR.
 
 The build fetches the SDK pinned in `scripts/openvr.sh`. `deps.sh` fetches the
 STB headers through `scripts/stb.sh`, at the commit and SHA-256s it pins. The
@@ -31,12 +30,11 @@ renderer uses the installed Noto Sans font. There are no vendored binaries or
 headers.
 
 If the helper is missing or fails, reset still waits at least three seconds
-before sampling the head. A missing helper does not start a container or access VR.
+before sampling the head. A missing helper does not access VR.
 A helper timeout is bounded at six seconds; a failure does not cancel the reset.
 The repo helper also receives an absolute `CLOCK_MONOTONIC` deadline at six
-seconds from the request. The host and its Distrobox share this clock. Because
-`scripts/in-box` cannot forward the host timeout to its container child, this
-deadline prevents a container that starts late from showing a stale countdown.
+seconds from the request, so a helper that starts late cannot show a stale
+countdown.
 Expiry is checked before VR initialization, after initialization and overlay
 creation, before showing, and between frames; any existing overlay is cleaned
 up.

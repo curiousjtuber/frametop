@@ -28,7 +28,7 @@ These stay in the tree, unchanged, so subtree pulls stay clean. In `--frametop` 
 
 - The updater: `src/updates.cpp`, `include/framekeyboard/updates.hpp`, `update/update_helper.py`, `docs/updates.md`, and the `updates` and `update-helper` tests. `src/app.cpp` hides its button, and `src/vr.cpp` still includes its header.
 - Start with SteamOS: `src/startup.cpp` and the `startup-unit` test. Frametop's service starts it, and `src/app.cpp` hides the setting.
-- Packaging and release: `scripts/package.sh`, `scripts/install-local.sh`, `tools/check_release_binary.py`, `cmake/steam-frame-aarch64.cmake` (Frametop builds natively in its container), `docs/releasing.md` and the `installer` test.
+- Packaging and release: `scripts/package.sh`, `scripts/install-local.sh`, `tools/check_release_binary.py`, `cmake/steam-frame-aarch64.cmake` (Frametop builds natively, on the Frame host and in its build image), `docs/releasing.md` and the `installer` test.
 - Typing through uinput (`--input uinput`, `UInputSink`): Frametop types through libei and its relay.
 - The desktop preview (`src/preview.cpp`, `scripts/preview.sh`): a development window, not the VR keyboard.
 - `design/index.html`: upstream's approved look, for their own reviews.
@@ -55,7 +55,7 @@ Known limits: on the desktop, keys go by their place on the keyboard, so pick th
 ## Building and running
 
 ```
-keyboard/build.sh                          # build/frametop/framekeyboard, in the dev container
+keyboard/build.sh                          # build/frametop/framekeyboard, on the Frame host
 FULL_KEYBOARD_TESTS=1 keyboard/build.sh    # with its tests (ctest)
 keyboard/run.sh install | uninstall        # frametop-keyboard.service, starts with SteamVR
 keyboard/run.sh status | restart | log [lines]
