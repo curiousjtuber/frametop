@@ -33,7 +33,6 @@ import argparse
 import http.server
 import json
 import urllib.request
-import math
 import os
 import re
 import signal
