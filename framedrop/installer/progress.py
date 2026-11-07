@@ -4,7 +4,8 @@ then the install's progress.
 
 Usage: progress.py DIR [--dry-run]
   DIR        the installer's folder. A release's Frametop.zip has install-release.sh, the
-             image (frametop-image.tar), and frametop-release.json: it installs that, built.
+             built tree (frametop-tree.tar.zst), the Python runtime (frametop.flatpak) and
+             frametop-release.json: it installs that, built.
              A test zip has get.sh instead, which clones Frametop from GitHub.
   --dry-run  unpack into ~/.cache/frametop-framedrop/dry-run and stop there, without
              installing, for testing this flow
@@ -42,7 +43,7 @@ UNIT = "frametop-framedrop-install"
 HOME = Path.home()
 STATE = HOME / ".cache" / "frametop-framedrop"
 LOG = STATE / "install.log"
-RELEASE = (HERE / "install-release.sh").exists() and (HERE / "frametop-image.tar").exists()
+RELEASE = (HERE / "install-release.sh").exists() and (HERE / "frametop-tree.tar.zst").exists()
 SOCK_DIR = Path(f"/run/user/{os.getuid()}/frametop-install")
 SOCK = SOCK_DIR / "askpass"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")

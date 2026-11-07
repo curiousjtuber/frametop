@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """Offline test of install-release.sh's install, release after release (docs/charts G7): which
-release is "current", which folders stay, and a reinstall over fast-installed files. podman is a
-shell function that copies a made-up tree, /etc/os-release a made-up one, and each tree's
-install.sh is install.sh's own "current" block. Everything happens in a temp folder:
-no podman, no install, no network.
+release is "current", which folders stay, and a reinstall over fast-installed files. Each
+release is a made-up tree in a real frametop-tree.tar.zst with a made-up bundle, /etc/os-release
+a made-up one, and each tree's install.sh is install.sh's own "current" block. Everything
+happens in a temp folder: no flatpak, no install, no network.
 
   pack/test/install-release-test.py
 """
-import hashlib
-import io
 import json
 import os
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
 
@@ -32,16 +29,6 @@ INSTALL = Path(REPO, "install.sh").read_text()
 start = INSTALL.index("# A release's install.sh is also how you go back to it")
 CURRENT_BLOCK = INSTALL[start:INSTALL.index('step "Done"', start)]
 
-# podman: "image inspect" names the loaded image, "cp" copies the made-up tree, the rest succeed
-PODMAN = r'''
-podman() {
-  case "$1 $2" in
-    "image inspect") echo "$FAKE_ID" ;;
-    *) [ "$1" = cp ] && cp -a "$FAKE_TREE/." "$3" ;;
-  esac
-  return 0
-}
-'''
 failures = []
 
 
@@ -52,47 +39,35 @@ def check(label, got, want):
         failures.append(label)
 
 
-def oci_archive(path, config):
-    def digest(b):
-        return hashlib.sha256(b).hexdigest()
-    manifest = json.dumps({"schemaVersion": 2, "config": {"digest": "sha256:" + digest(config)}, "layers": []}).encode()
-    index = json.dumps({"schemaVersion": 2, "manifests": [{"digest": "sha256:" + digest(manifest)}]}).encode()
-    with tarfile.open(path, "w") as tar:
-        for name, data in (("index.json", index), (f"blobs/sha256/{digest(manifest)}", manifest),
-                           (f"blobs/sha256/{digest(config)}", config)):
-            info = tarfile.TarInfo(name)
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-    return digest(config)
-
-
 def make_zip(version):
-    """An unpacked Frametop.zip for VERSION, and the tree its image holds."""
+    """An unpacked Frametop.zip for VERSION: its tree (one install.sh) as the tar, and a bundle."""
     unpacked = os.path.join(TMP, f"zip-{version}")
     tree = os.path.join(TMP, f"tree-{version}")
     os.makedirs(unpacked)
     os.makedirs(tree)
-    image = os.path.join(unpacked, "frametop-image.tar")
-    image_id = oci_archive(image, json.dumps({"architecture": "arm64", "v": version}).encode())
-    table = os.path.join(TMP, "steamos.json")
-    Path(table).write_text(json.dumps({"tested": [{"build": "20260922.6101926", "version": version}]}))
-    out = subprocess.run([sys.executable, os.path.join(REPO, "pack", "release-info.py"), "--image-file", image,
-                          "--version", version, "--commit", "1234567", "--steamos", table],
-                         capture_output=True, text=True, check=True).stdout
-    Path(unpacked, "frametop-release.json").write_text(out)
     Path(tree, "install.sh").write_text('#!/usr/bin/env bash\nset -euo pipefail\nroot=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)\n'
                                         'FRAME_RELEASE=1 FRAME_LOCAL=1\necho "install.sh of $root"\n' + CURRENT_BLOCK)
     os.chmod(os.path.join(tree, "install.sh"), 0o755)
-    return unpacked, tree, image_id
+    tar = os.path.join(unpacked, "frametop-tree.tar.zst")
+    subprocess.run(["tar", "--zstd", "-C", tree, "-cf", tar, "."], check=True)
+    bundle = os.path.join(unpacked, "frametop.flatpak")
+    Path(bundle).write_bytes(b"not a bundle: " + version.encode())
+    table = os.path.join(TMP, "steamos.json")
+    Path(table).write_text(json.dumps({"tested": [{"build": "20260922.6101926", "version": version}]}))
+    out = subprocess.run([sys.executable, os.path.join(REPO, "pack", "release-info.py"), "--tree-file", tar,
+                          "--flatpak-file", bundle, "--version", version, "--commit", "1234567", "--steamos", table],
+                         capture_output=True, text=True, check=True).stdout
+    Path(unpacked, "frametop-release.json").write_text(out)
+    return unpacked
 
 
 ZIPS = {v: make_zip(v) for v in ("1.0", "2.0", "3.0")}
 
 
 def install(version):
-    unpacked, tree, image_id = ZIPS[version]
-    env = dict(os.environ, FAKE_ID=image_id, FAKE_TREE=tree, FRAMETOP_STEAMOS_TABLE="none")
-    r = subprocess.run(["bash", "-c", SCRIPT + PODMAN + 'main "$@"', "install-release.sh", "--yes", "--dir", RELEASES],
+    unpacked = ZIPS[version]
+    env = dict(os.environ, FRAMETOP_STEAMOS_TABLE="none")
+    r = subprocess.run(["bash", "-c", SCRIPT + 'main "$@"', "install-release.sh", "--yes", "--dir", RELEASES],
                        cwd=unpacked, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False)
     return r.returncode, r.stdout + r.stderr
 
@@ -108,6 +83,10 @@ def folders():
 
 code, out = install("1.0")
 check("the first release installs", (code, current(), folders()), (0, "1.0", ["1.0"]))
+check("its bundle is in the tree, for install.sh", os.path.isfile(os.path.join(RELEASES, "1.0", "pack/flatpak/build/frametop.flatpak")), True)
+check("and .frametop-release names the version, the app and the tree's sha256",
+      sorted(line.split("=")[0] for line in Path(RELEASES, "1.0", ".frametop-release").read_text().splitlines()),
+      ["CHANNEL", "COMMIT", "FLATPAK", "FLATPAK_SHA256", "TREE_SHA256", "VERSION"])
 code, out = install("2.0")
 check("the next one is current, and the one before stays", (code, current(), folders()), (0, "2.0", ["1.0", "2.0"]))
 code, out = install("3.0")
@@ -128,11 +107,15 @@ os.makedirs(os.path.join(RELEASES, "3.0", ".fast-install"))
 Path(RELEASES, "3.0", ".fast-install", "state.json").write_text("{}")
 code, out = install("3.0")
 check("a reinstall over fast-installed files is refused", (code, "fast-install undo" in out), (1, True))
-check("...and leaves the releases as they were", (current(), folders()), ("3.0", ["2.0", "3.0"]))
-os.rename(os.path.join(RELEASES, "3.0", ".fast-install"), os.path.join(TMP, "undone"))
-code, out = install("3.0")
-check("after fast-install undo, it installs again", (code, current()), (0, "3.0"))
+check("and current and the folders stay", (current(), folders()), ("3.0", ["2.0", "3.0"]))
 
+# A damaged tree stops before anything is unpacked, with status 3 (get.sh downloads again).
+shutil.rmtree(RELEASES)
+damaged = ZIPS["1.0"]
+Path(damaged, "frametop-tree.tar.zst").write_bytes(b"bit rot")
+code, out = install("1.0")
+check("a damaged tree is refused with status 3", (code, "damaged" in out, os.path.exists(RELEASES)), (3, True, False))
+
+shutil.rmtree(TMP)
 print("FAILED: " + ", ".join(failures) if failures else "all passed", flush=True)
-shutil.rmtree(TMP, ignore_errors=True)
 sys.exit(1 if failures else 0)

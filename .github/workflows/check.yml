@@ -1,6 +1,7 @@
 # The test gate, run by hand (Actions > check > Run workflow), on GitHub's own arm64 runner
 # (free for public repositories; the Frame is aarch64): the image from pack/Containerfile, then
-# `./ft dev test` inside it, the same gate release.yml runs before it builds a release. Nothing is
+# `./ft dev test` inside it, the same gate release.yml runs before it builds a release. The suites
+# that need KDE run in the Flatpak, which release.yml builds; here they're skipped. Nothing is
 # built or published: release.yml (Depot, on v* tags) still makes the releases.
 #
 # Manual only (Daenon, 2026-11-01): no push or pull request starts it. Read-only: no secrets, no
