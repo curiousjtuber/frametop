@@ -912,7 +912,6 @@ class StandaloneTest(unittest.TestCase):
 
     def recorder_argv(self, standalone):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(session, "STANDALONE", standalone), \
-                mock.patch.object(session, "in_container", return_value=False), \
                 mock.patch.object(session.subprocess, "Popen") as popen:
             session.Recorder(d, 1, 10, None, None)
             return popen.call_args[0][0]
@@ -931,12 +930,12 @@ class StandaloneTest(unittest.TestCase):
         self.assertIn("--no-gestures", argv)
         run.assert_not_called()   # no container to bring up
 
-    def test_ft_hands_in_frametops_container(self):
-        # scripts/in-box: "dev" in a clone, the release's own container in a release
-        self.assertEqual(self.recorder_argv(None)[:2], [session.IN_BOX, session.FT_HANDS])
-        argv, _ = self.tracker_argv(None)
-        self.assertEqual(argv[:2], [session.IN_BOX, session.FT_HANDS])
-        self.assertTrue(os.access(session.IN_BOX, os.X_OK))
+    def test_ft_hands_from_a_checkout(self):
+        # Built for the host too (hands/build.sh): no container, standalone or not.
+        self.assertEqual(self.recorder_argv(None)[0], session.FT_HANDS)
+        argv, run = self.tracker_argv(None)
+        self.assertEqual(argv[0], session.FT_HANDS)
+        run.assert_not_called()
 
     def test_fix_hint(self):
         with mock.patch.object(session, "STANDALONE", self.INFO):

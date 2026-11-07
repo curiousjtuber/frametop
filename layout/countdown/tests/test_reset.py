@@ -46,7 +46,6 @@ class Harness:
         self.m.os = types.SimpleNamespace(**vars(self.m.os))
         self.m.os.access = lambda path, mode: (self.helper_available if path == self.m.RESET_TIMER
                                               else real_access(path, mode))
-        self.m.in_container = lambda: True
         self.m.load_layout = self.load_layout
         self.m.save_layout = lambda layout: self.events.append(("save",))
         self.m.backend = lambda: "screens"
@@ -150,7 +149,6 @@ class ResetCountdownReview(unittest.TestCase):
     def test_missing_helper_fallback_waits_full_three_seconds(self):
         h = Harness(self.lock)
         h.helper_available = False
-        h.m.in_container = lambda: self.fail("missing helper attempted container launch")
         h.on_sleep = lambda seconds: setattr(h, "head", [10.0, 20.0, 30.0, 90.0])
         self.assert_new_head_after_wait(h)
         self.assertEqual([e for e in h.events if e[0] == "sleep"], [("sleep", 3)])
@@ -250,14 +248,6 @@ class ResetCountdownReview(unittest.TestCase):
         self.assertEqual(h.run("reset"), 0)
         helper = next(e for e in h.events if e[0] == "helper_start")
         self.assertEqual(helper[1], (h.m.RESET_TIMER, "--deadline", "106.000000000"))
-
-    def test_built_helper_enters_its_release_container_from_host(self):
-        h = Harness(self.lock)
-        h.m.in_container = lambda: False
-        self.assertEqual(h.run("reset"), 0)
-        helper = next(e for e in h.events if e[0] == "helper_start")
-        self.assertEqual(helper[1], (str(pathlib.Path(h.m.REPO) / "scripts/in-box"),
-                                     h.m.RESET_TIMER, "--deadline", "106.000000000"))
 
     def test_failed_built_helper_does_not_start_a_second_countdown(self):
         h = Harness(self.lock)

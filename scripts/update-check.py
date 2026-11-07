@@ -52,7 +52,13 @@ EYE_LOG = os.path.join(HOME, ".local/share/Steam/logs/eyetracking.txt")
 EYE_RATE_MARK = os.path.join(HOME, ".local/state/frametop/gaze/steamvr-eye-rate")  # gaze/eye-rate.py
 VRSERVER = "http://127.0.0.1:27062"  # its web socket: input/vrws.py
 PAUSE_STATE = f"/run/user/{os.getuid()}/frametop-pause.json"  # input/game_pause.py
-HOST_GLIBC = (2, 39)  # the newest the pointer driver may need (pointer/driver/build.sh)
+# The glibc floor every program built for the host keeps to (scripts/host-glibc.sh's
+# host_glibc_max, the same number): the oldest SteamOS a release runs on. Two cases: in the
+# build image and on a newer SteamOS (a beta), the compiler is pinned to the floor's symbol
+# versions (scripts/glibc-compat.h); on the floor's own SteamOS it holds by itself. A SteamOS
+# update that moves glibc: regenerate the header there (scripts/glibc-compat.py --write), and
+# raise the floor only once no supported SteamOS is older.
+HOST_GLIBC = (2, 39)
 
 # Packages in the OS image that Frametop depends on, and what to try by hand when one changes.
 PACKAGES = {
@@ -329,9 +335,9 @@ def check_host():
     have = tuple(int(x) for x in re.findall(r"\d+", glibc)[:2])
     want = ".".join(map(str, HOST_GLIBC))
     if have >= HOST_GLIBC:
-        report("ok", "glibc", f"{glibc}, the pointer driver needs {want}")
+        report("ok", "glibc", f"{glibc}, Frametop's programs are built for {want}")
     else:
-        report("FAIL", "glibc", f"{glibc}, older than the {want} the pointer driver needs")
+        report("FAIL", "glibc", f"{glibc}, older than the {want} Frametop's programs are built for")
 
     try:
         with open(VRPATHS) as f:
@@ -574,6 +580,39 @@ def check_chaperone():
     guessed = sum(1 for u in universes if [round(v, 3) for v in u["standing"]["translation"]] == [0, 1.6, 0]
                   and abs(u["standing"]["yaw"]) < 1e-4)
     report("ok", "SteamVR's saved universes", f"{len(universes)}, {guessed} with the guessed floor of a lost room")
+
+
+def check_libraries():
+    """The host libraries the installed programs link (ft-screens' mesa, wayland and the rest):
+    a SteamOS update that drops or renames one leaves a program that can't start. And a program
+    that needs a symbol version newer than this glibc has: a build that escaped the floor
+    (scripts/host-glibc.sh), which only shows on the older SteamOS."""
+    programs = installed_binaries()
+    if not programs:
+        report("skip", "host libraries", "no installed Frametop programs found")
+        return
+    missing, newer = {}, {}
+    for path in sorted(programs):
+        try:
+            out = subprocess.run(["ldd", path], capture_output=True, text=True, timeout=20).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        for line in out.splitlines():
+            # "libfoo.so.1 => not found", or "version `GLIBC_2.43' not found (required by ...)"
+            version = re.search(r"version `([^']+)' not found", line)
+            if version:
+                newer.setdefault(os.path.basename(path), set()).add(version.group(1))
+            elif "not found" in line:
+                missing.setdefault(line.split()[0], set()).add(os.path.basename(path))
+    for lib, by in sorted(missing.items()):
+        report("FAIL", f"library {lib}", f"missing on this SteamOS; {', '.join(sorted(by))} can't start. "
+               "Rebuild (the build scripts) or wait for a release built for this SteamOS")
+    for program, versions in sorted(newer.items()):
+        report("FAIL", program, f"needs {', '.join(sorted(versions))}, newer than this SteamOS has: it was built "
+               "past the glibc floor (scripts/host-glibc.sh). Rebuild it here, or report it")
+    if not missing and not newer:
+        report("ok", "host libraries", f"every library the {len(programs)} installed programs link is here, "
+               "at the versions they need")
 
 
 def check_openvr():
@@ -1015,6 +1054,7 @@ def main():
     else:
         sockets = unix_sockets()
         desktop_up = run("pgrep", "-x", "ft-screens")[0] == 0
+        check_libraries()
         check_openvr()
         check_overlays(desktop_up)
         check_services(sockets, desktop_up)

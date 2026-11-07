@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Run a command on the Steam Frame, inside the "dev" distrobox by default.
+# Run a command on the Steam Frame: on the SteamOS host with --host (the build scripts and
+# installers; in the build image, FRAME_IN_BOX=1, that's this checkout), or inside the "dev"
+# distrobox (Remote Access's container) without it.
 # On the Frame itself it runs locally in this checkout; from a PC it runs over SSH
 # in the synced copy (see scripts/_env.sh).
 # Usage: scripts/frame.sh [--host] [-C subdir] command [args...]

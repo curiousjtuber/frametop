@@ -10,18 +10,15 @@ Requisite=steamvr.service
 [Service]
 # SteamOS's Mesa settings, as Full Keyboard's own startup unit has them.
 EnvironmentFile=-/usr/share/deckard/mesavars.sh
-# Runs in the container it was built in (scripts/in-box, which starts it in a scope of its
-# own), so clean it up explicitly around it. Its layouts, themes and languages come from
-# the source folder.
+# Built for the host (keyboard/build.sh), so it runs directly. Its layouts, themes and
+# languages come from the source folder.
 ExecStartPre=-/usr/bin/pkill -x framekeyboard
-ExecStart=@REPO@/scripts/in-box @REPO@/keyboard/build/frametop/framekeyboard --frametop --data-dir @REPO@/keyboard
-ExecStopPost=-/usr/bin/pkill -x framekeyboard
+ExecStart=@REPO@/keyboard/build/frametop/framekeyboard --frametop --data-dir @REPO@/keyboard
 # Quitting it from its own panel exits with 3: it stays closed until SteamVR starts again.
 SuccessExitStatus=3
 RestartPreventExitStatus=3
 Restart=on-failure
 RestartSec=3
-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
 TimeoutStopSec=5
 
 [Install]

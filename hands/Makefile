@@ -1,5 +1,5 @@
-# Hand tracking, built into build/ (hands/build.sh runs this in the dev container):
-#   make          ft-camd (camd/: runs on the host, so linked statically) and ft-hands (track/)
+# Hand tracking, built into build/ (hands/build.sh runs this on the Frame host):
+#   make          ft-camd (camd/: linked statically, for its file capabilities) and ft-hands (track/)
 #   make tools    ft-handreplay and ft-ringplay, for recordings
 #   make check    builds and runs the C++ unit tests (tests/sides_test.cpp, tests/skeleton_test.cpp,
 #                 tests/pinch_test.cpp, tests/flagbuf_test.cpp)
@@ -12,7 +12,11 @@ NCNN_SHA256 = 754659d6fe65545cf2ef4483ffb84526fea631f8764c44b150f1601d0fb4004b
 NCNN     ?= build/ncnn/install
 CFLAGS   ?= -O2 -g -Wall -Wextra -Wno-unused-parameter
 CXXFLAGS ?= -O2 -g -Wall -Wextra -Wno-unused-parameter -Wno-psabi
-CXXFLAGS += -std=c++17 -fopenmp -I$(NCNN)/include/ncnn
+# hands/build.sh passes FT_COMPAT, scripts/host-glibc.sh's -include: the symbol-version pins
+# that keep ft-hands and ncnn within the host's glibc. Not for ft-camd's static link (libc.a
+# has no versions), which needs none.
+FT_COMPAT ?=
+CXXFLAGS += -std=c++17 -fopenmp $(FT_COMPAT) -I$(NCNN)/include/ncnn
 LDLIBS    = $(NCNN)/lib/libncnn.a -ljsoncpp -fopenmp -lpthread
 # The standalone Hand Recorder's release build passes LDFLAGS=-static (it runs on the host).
 LDFLAGS  ?=
@@ -69,6 +73,7 @@ build/ncnn/install/lib/libncnn.a:
 	echo "$(NCNN_SHA256)  build/ncnn/src.zip" | sha256sum -c --quiet
 	unzip -q build/ncnn/src.zip -d build/ncnn/src && rm build/ncnn/src.zip
 	cmake -S build/ncnn/src -B build/ncnn/build -G Ninja -Wno-dev -DCMAKE_BUILD_TYPE=Release \
+	  -DCMAKE_C_FLAGS="$(FT_COMPAT)" -DCMAKE_CXX_FLAGS="$(FT_COMPAT)" \
 	  -DCMAKE_INSTALL_PREFIX=$(CURDIR)/build/ncnn/install -DCMAKE_INSTALL_LIBDIR=lib -DNCNN_VULKAN=OFF \
 	  -DNCNN_OPENMP=ON -DNCNN_INT8=ON -DNCNN_SIMPLEOCV=ON -DNCNN_BUILD_TOOLS=OFF -DNCNN_BUILD_EXAMPLES=OFF \
 	  -DNCNN_BUILD_BENCHMARK=OFF -DNCNN_BUILD_TESTS=OFF -DNCNN_PYTHON=OFF > build/ncnn/cmake.log

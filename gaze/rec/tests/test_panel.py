@@ -17,14 +17,11 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PANEL = os.path.join(HERE, "..", "..", "build", "ft-gazepanel")
-IN_BOX = os.path.expanduser("~/.local/bin/distrobox")
 
 
 def command():
-    """The panel's argv: in the dev container on the Frame's host, where it was built."""
-    if os.path.exists("/run/.containerenv") or not os.path.exists(IN_BOX):
-        return [PANEL]
-    return [IN_BOX, "enter", "dev", "--", PANEL]
+    """The panel's argv: built for the Frame's host (gaze/build.sh), it runs directly."""
+    return [PANEL]
 
 
 @unittest.skipUnless(os.path.exists(PANEL), "the panel isn't built (gaze/build.sh)")

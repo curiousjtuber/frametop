@@ -106,7 +106,7 @@ def main():
         sys.exit("the headset isn't worn: the headset view is black while the display is off")
     dev = open("/dev/video99", "rb", buffering=0)
     grab(dev)  # v4l2cam starts with the first reader; its first frames are black
-    cmd = ["frame-job", "--local", "--", "distrobox", "enter", "dev", "--", DECTEST, clip, "--ref", pattern,
+    cmd = ["frame-job", "--local", "--", DECTEST, clip, "--ref", pattern,
            "--headlocked", "--alternate", "2.5", "--distance", "1.0", "--width", "2.6",
            "--seconds", str(seconds)] + extra
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)

@@ -3,9 +3,9 @@
 
   scripts/fast-install [REV] [--dry-run] [--no-restart] [--worn-ok] [--partial]
                        install REV (default HEAD) into the live release: rebuild the
-                       components whose sources changed since the release's commit (in the
-                       release's own container), then put the changed files and programs in
-                       place and restart the services that run them
+                       components whose sources changed since the release's commit (on the
+                       host, as the release was built), then put the changed files and
+                       programs in place and restart the services that run them
   scripts/fast-install status
                        what's fast-installed on top of the live release, and the steps left
   scripts/fast-install done PATH... | --all
@@ -19,10 +19,11 @@ to try commits on it while developing: seconds for Python, QML and scripts, a mi
 a rebuilt component (the first build of hands, voice, stream or keyboard fetches and builds
 their libraries, which takes longer). It installs committed code only (git, not the working
 tree), so what runs is a commit you can name. The full build still comes before a push or a
-release: this never runs the installers, never changes the image, and never restarts SteamVR.
+release: this never runs the installers, never changes the Flatpak, and never restarts SteamVR.
 
-It refuses changes the release's image has to carry (Python packages, the image's packages),
-unless --partial installs the rest anyway. Changes an installer puts in place (units, menu
+It refuses changes the release's Flatpak or the build image has to carry (Python packages,
+the manifest, the image's packages), unless --partial installs the rest anyway. Changes an
+installer puts in place (units, menu
 entries, the SteamVR driver, files under /etc) are copied into the tree and listed as steps
 left, and so are the restarts it left; it exits 3 while any are left. A changed ft-camd holds
 hand tracking back: a new one needs file capabilities, so that takes the full build.
@@ -34,8 +35,7 @@ programs a build changes.
 Each file it changes is saved first, once, in RELEASE/.fast-install/orig/, and
 RELEASE/.fast-install/state.json records it before the file changes, so undo works after a
 failed run too. A new release replaces all of it. Builds run pinned to as many cores as
-frame-job allows now (1 while the headset is worn): podman's processes leave frame-job's
-scope, so the pin is what keeps VR smooth.
+frame-job allows now (1 while the headset is worn), so VR stays smooth.
 
 Host side: Python 3 standard library only.
 """
@@ -54,11 +54,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RELEASES = Path.home() / '.local/share/frametop/releases'
 STAGE = Path.home() / '.cache/frametop-fast/src'   # a shared clone where components build
-DISTROBOX = Path.home() / '.local/bin/distrobox'
 
-# What the release's image carries: a change here needs the full build.
-IMAGE = {'pack/Containerfile', 'pack/pyside-runtime.py', 'uv.lock', 'pyproject.toml',
-         '.python-version', 'setup/dev-container.sh', 'setup/packages.txt'}
+# What the release's Flatpak and the build image carry: a change here needs the full build.
+IMAGE = {'pack/Containerfile', 'uv.lock', 'pyproject.toml', '.python-version', 'setup/packages.txt',
+         'pack/flatpak/io.github.frametop.Frametop.yml', 'pack/flatpak/modules.py',
+         'pack/flatpak/build.sh'}
 # Components with a build.sh: the paths outside their folder their build reads, and the
 # outputs that go into the live tree (in COMPONENT/build; the Containerfile keeps the same).
 # Their own folder's build inputs are its sources and build files (BUILD_SUFFIXES,
@@ -68,22 +68,25 @@ IMAGE = {'pack/Containerfile', 'pack/pyside-runtime.py', 'uv.lock', 'pyproject.t
 # built from elsewhere) is.
 OPENVR = 'scripts/openvr.sh'
 STB = 'scripts/stb.sh'           # the pinned stb headers
+# What keeps every build within the host's glibc (the pins every compile includes, and the
+# check): a change there is a change to every program.
+GLIBC = ('scripts/host-glibc.sh', 'scripts/glibc-compat.h')
 HANDS_API = 'hands/include'   # ft-hands' event and gesture structs, which its readers include
 COMPONENTS = {
-    'screens': ((HANDS_API, 'frunner/ft-spotpanel.cpp', 'frunner/reserve.h', OPENVR, STB),
+    'screens': ((HANDS_API, 'frunner/ft-spotpanel.cpp', 'frunner/reserve.h', OPENVR, STB, *GLIBC),
                 ('ft-screens', 'ft-handtest', 'ft-handview', 'ft-spotpanel')),
-    'layout/countdown': ((OPENVR, STB), ('ft-reset-timer',)),
-    'pointer/helper': ((HANDS_API, 'pointer/common', OPENVR), ('ft-pointer',)),
-    'pointer/driver': (('pointer/common', OPENVR), ('driver_ft_pointer.so',)),
-    'gaze': (('pointer/common', OPENVR, STB), ('ft-gaze', 'ft-gazepanel')),
-    'gaze/tracker': ((), ('ft-eyegrab',)),
-    'keyboard': ((OPENVR,), ('frametop/framekeyboard', 'frametop/framekeyboard-native-guard',
-                             'frametop/engines/*', 'frametop/bridge/*', 'frametop/vr/*')),
-    'power': ((OPENVR,), ('ft-powerd',)),
-    'stream': ((OPENVR,), ('ft-stream',)),   # the spikes only with build.sh --spikes
-    'voice': ((), ('bin/whisper-server',)),
-    'hands': ((), ('ft-hands', 'ft-camd')),
-    'hands/rec': ((OPENVR, STB), ('ft-handpanel',)),
+    'layout/countdown': ((OPENVR, STB, *GLIBC), ('ft-reset-timer',)),
+    'pointer/helper': ((HANDS_API, 'pointer/common', OPENVR, *GLIBC), ('ft-pointer',)),
+    'pointer/driver': (('pointer/common', OPENVR, *GLIBC), ('driver_ft_pointer.so',)),
+    'gaze': (('pointer/common', OPENVR, STB, *GLIBC), ('ft-gaze', 'ft-gazepanel')),
+    'gaze/tracker': ((*GLIBC,), ('ft-eyegrab',)),
+    'keyboard': ((OPENVR, *GLIBC), ('frametop/framekeyboard', 'frametop/framekeyboard-native-guard',
+                                    'frametop/engines/*', 'frametop/bridge/*', 'frametop/vr/*')),
+    'power': ((OPENVR, *GLIBC), ('ft-powerd',)),
+    'stream': ((OPENVR, *GLIBC), ('ft-stream',)),   # the spikes only with build.sh --spikes
+    'voice': ((*GLIBC,), ('bin/whisper-server',)),
+    'hands': ((*GLIBC,), ('ft-hands', 'ft-camd')),
+    'hands/rec': ((OPENVR, STB, *GLIBC), ('ft-handpanel',)),
 }
 WHOLE = {'keyboard'}   # its CMake build embeds layouts, languages and themes, and copies scripts
 BUILD_SUFFIXES = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.S', '.glsl', '.vert', '.frag',
@@ -307,7 +310,9 @@ def frame_status():
 
 def stage_checkout(rev, box):
     """STAGE at rev. Its ignored build/ folders stay, so builds reuse what they fetched, unless
-    the release's container changed (another image, other libraries): then they go."""
+    the release changed (box: its version; another release may have been built with other
+    pins or another toolchain, and host_build_stamp in the builds catches the rest): then
+    they go."""
     if not (STAGE / '.git').exists():
         STAGE.parent.mkdir(parents=True, exist_ok=True)
         common = Path(git('rev-parse', '--path-format=absolute', '--git-common-dir'))
@@ -322,13 +327,15 @@ def stage_checkout(rev, box):
 
 
 def build(comp, box, cpus):
+    """comp's build.sh on the host, in the stage (FRAME_LOCAL=1: no sync, this checkout),
+    pinned to cpus; through frame-job where it's installed, so a worn headset keeps its cores."""
     script = f'{comp}/build.sh'
-    say(f'  building {comp} in {box} (CPUs {cpus})')
-    cmd = f'cd {STAGE} && exec taskset -c {cpus} env FRAME_IN_BOX=1 OPENVR_LIB=/opt/frametop/lib ./{script}'
+    say(f'  building {comp} for {box} (CPUs {cpus})')
+    cmd = f'cd {STAGE} && exec taskset -c {cpus} env FRAME_LOCAL=1 ./{script}'
     log = STAGE.parent / f'build-{comp.replace("/", "-")}.log'
+    runner = ['frame-job', '--local', '--'] if shutil.which('frame-job') else []
     with open(log, 'w') as out:
-        done = subprocess.run(['frame-job', '--local', '--', str(DISTROBOX), 'enter', box, '--',
-                               'bash', '-c', cmd], cwd=ROOT, stdout=out, stderr=subprocess.STDOUT)
+        done = subprocess.run([*runner, 'bash', '-c', cmd], cwd=ROOT, stdout=out, stderr=subprocess.STDOUT)
     if done.returncode:
         tail = log.read_text(errors='replace').splitlines()[-15:]
         raise Refused(f'{script} failed, nothing installed (log {log}):\n    ' + '\n    '.join(tail))
@@ -431,7 +438,7 @@ def dirs_used(tree, unit, args, roots):
         i, root = min(hits)
         rel = os.path.normpath(arg[i + len(root):].rstrip(';'))
         if rel.startswith(('scripts/', '..')):
-            continue   # scripts/in-box starts most of them
+            continue   # scripts/ft-python starts the Python ones
         if unit in FILE_LEVEL and not (tree / rel).is_dir():
             dirs.add(rel)
             continue
@@ -500,7 +507,7 @@ def install(rev, dry, restart_units, worn_ok, partial):
 
     image = [p for p in candidates if p in IMAGE and new.get(p) != old.get(p)]
     if image and not partial:
-        raise Refused('the release\'s image has to change for: ' + ', '.join(image) +
+        raise Refused('the release\'s Flatpak or build image has to change for: ' + ', '.join(image) +
                       '\n  do the full build (ft dev build, get.sh --zip), or --partial to install the rest anyway')
 
     puts, removes, steps, drift = {}, [], {}, []
@@ -553,11 +560,11 @@ def install(rev, dry, restart_units, worn_ok, partial):
         return 3 if steps or state['steps'] else 0
 
     if rebuild:
-        stage_checkout(target, info['BOX'])
+        stage_checkout(target, info.get('VERSION', ''))
         _, cores = frame_status()
         cpus = ','.join(map(str, sorted(os.sched_getaffinity(0))[:cores]))
         for comp, _ in rebuild:
-            build(comp, info['BOX'], cpus)
+            build(comp, info.get('VERSION', ''), cpus)
         for comp, _ in rebuild:
             for rel, f in sorted(outputs(comp).items()):
                 if rel in INSTALLED and rel not in steps:

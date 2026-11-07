@@ -45,7 +45,6 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, REPO)
 import benchrec  # noqa: E402
 from recorder.button import ButtonReader, find_button, read_input_devices  # noqa: E402
-from recorder.common import in_container  # noqa: E402
 
 PANEL_DEG, PANEL_ASPECT = 64.0, 0.75   # ft-gazepanel's rec panel (kFullDeg, 4:3), as gaze/rec/session.py
 MARGIN = 1.5            # degrees from the panel's edge to a target at 0 or 1, measured in the panel's plane
@@ -57,7 +56,6 @@ HELPER_SOCK = os.environ.get("FT_BENCH_HELPER_SOCKET", "ft_pointer_helper")   # 
 CLAIM_EVERY = 1.0       # s between claims of the helper's calibration panel (it lets one go after 3 s)
 PANELS = [Path(p) for p in (os.environ.get("FT_GAZEPANEL"), os.path.join(GAZE, "build", "ft-gazepanel"),
                             Path.home() / ".local/share/frametop/releases/current/gaze/build/ft-gazepanel") if p]
-IN_BOX = os.path.join(REPO, "scripts", "in-box")
 PANEL_WAIT = 20.0       # s for a new panel to answer (SteamVR's overlays can take a while)
 LOOK = (0.4, 0.1)       # s before a press: the gaze samples a mark takes. It ends a little before the
                         # press (a click's was 0.05 s): the push on the headset's side comes before it
@@ -81,11 +79,6 @@ def quick_gaze(src, key):
     return (g["hy"], g["hp"]) if "hy" in g and g.get("ok", 1) != 0 else None
 KEYS_START = "Press the button, click, Enter or pinch to start. Hold the button or right click to end."
 KEYS_END = "Press the button, click, Enter or pinch to close this."
-
-
-def boxed(argv):
-    """A program built in the dev container: run it there (scripts/in-box from the host)."""
-    return list(argv) if in_container() or not os.path.exists(IN_BOX) else [IN_BOX] + list(argv)
 
 
 def margins(margin=MARGIN):
@@ -224,7 +217,7 @@ class Panel:
             return False
         argv = [str(self.prog), "--watch-stdin", "--socket", PANEL_SOCK, "--overlay", PANEL_OVERLAY]
         try:
-            self.proc = subprocess.Popen(boxed(argv + (["--no-vr"] if self.no_vr else [])), stdin=subprocess.PIPE,
+            self.proc = subprocess.Popen(argv + (["--no-vr"] if self.no_vr else []), stdin=subprocess.PIPE,
                                          stdout=subprocess.DEVNULL, start_new_session=True)
         except OSError as e:
             self.error = f"can't start {self.prog.name}: {e}"

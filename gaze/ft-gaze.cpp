@@ -616,8 +616,8 @@ int main(int argc, char **argv) {
     const int nice0 = getpriority(PRIO_PROCESS, 0);
     if (errno == 0 && nice0 < 5 && setpriority(PRIO_PROCESS, 0, 5) != 0)
         std::fprintf(stderr, "ft-gaze: nice: %s\n", std::strerror(errno));
-    // --watch-stdin: quit when stdin closes. The probe runs us through distrobox, which
-    // passes neither its signals nor a closed stdout on to us, but does pass stdin's end.
+    // --watch-stdin: quit when stdin closes: what the gaze service and the probe hold, and
+    // what ends us when they go, however they went.
     // Lines on stdin until then: "sources LIST".
     std::atomic<bool> stdinClosed{false};
     if (watchStdin)

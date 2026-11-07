@@ -85,7 +85,7 @@ from gaze.rec import sounds  # noqa: E402  (gaze/rec/sounds.py: the beeps)
 from recorder import bounties  # noqa: E402
 from recorder.controls import Controls, _Redo, _Skip, _Stop  # noqa: E402
 from recorder.button import BUTTON_DEVICE, ButtonReader, find_button, mouse_connected, read_input_devices  # noqa: E402
-from recorder.common import (clean_text, clock_sample, in_container, mono_ns, os_version,  # noqa: E402
+from recorder.common import (clean_text, clock_sample, mono_ns, os_version,  # noqa: E402
                              steamvr_version, write_json)
 from recorder.units import pause_units, resume_units  # noqa: E402
 
@@ -96,7 +96,6 @@ PANEL_BIN = os.path.join(GAZE, "build", "ft-gazepanel")
 FT_GAZE = os.path.join(GAZE, "build", "ft-gaze")
 FT_EYES = os.path.join(GAZE, "tracker", "ft-eyes")
 EYES_PYTHON = os.environ.get("FT_EYES_PYTHON") or os.path.join(GAZE, "tracker", "build", "venv", "bin", "python")
-IN_BOX = os.path.join(REPO, "scripts", "in-box")
 # The recorder's own copies, next to the gaze service's (which it pauses anyway)
 PANEL_SOCKET, PANEL_OVERLAY = "ft_eyerecpanel", "frametop.eyerecpanel"
 EYES_SOCKET, EYES_GAZE = "ft_eyes_rec", "/dev/shm/frametop-eyes-gaze-rec"
@@ -161,12 +160,7 @@ def run_dir():
 
 
 def fix_hint(build):
-    return "run %s in the dev container" % build
-
-
-def boxed(argv):
-    """A program built in the dev container: run it there (scripts/in-box from the host)."""
-    return list(argv) if in_container() or not os.path.exists(IN_BOX) else [IN_BOX] + list(argv)
+    return "run %s" % build
 
 
 # ------------------------------------------------------------------------------------------
@@ -826,7 +820,7 @@ class Session(Controls):
     def _spawn(self, name, argv, env=None):
         e = dict(os.environ, XDG_RUNTIME_DIR="/run/user/%d" % os.getuid())
         e.update(env or {})
-        p = subprocess.Popen(boxed(argv), env=e, stdin=subprocess.PIPE, stdout=subprocess.PIPE if name == "ft-gaze" else self._log_file,
+        p = subprocess.Popen(list(argv), env=e, stdin=subprocess.PIPE, stdout=subprocess.PIPE if name == "ft-gaze" else self._log_file,
                              stderr=self._log_file, start_new_session=True)
         self._procs[name] = p
         self._log("started %s (pid %d)" % (name, p.pid))

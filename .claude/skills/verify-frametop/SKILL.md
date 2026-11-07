@@ -200,10 +200,9 @@ A diff touching these gets the extra reviewer (Codex) in the review panel:
   `stream HOST [--display CLIENT] [--seconds N] [--allow-host-input] [--mic-bursts]`, `cleanup [RUN] [--force]`,
   `ask NAME MESSAGE [--listen S]`. `--help` prints the usage. Python 3 standard library only;
   runs on the SteamOS host.
-- `scripts/fake-viewer`: ft-screens' side of one remote display, headless. `V stream` runs it in
-  the Frametop container through the release's `scripts/in-box` (ft-stream's converter needs the
-  container's Mesa: on the host it fails with EGL 0x3009) with the layout display's client, app
-  and size, 30 fps and 20 Mbit/s. `RUN/stream-CLIENT-TIME/` gets `ft-stream.log`, `result.json`
+- `scripts/fake-viewer`: ft-screens' side of one remote display, headless. `V stream` runs it on
+  the host, with the release's ft-stream (built for the host) and the layout display's client,
+  app and size, 30 fps and 20 Mbit/s. `RUN/stream-CLIENT-TIME/` gets `ft-stream.log`, `result.json`
   (states, frames, frames per second) and `summary.json`; `ok` means it went live and frames
   came. It refuses a display that's already streaming (Vibepollo ties a display to its client,
   so it would take the panel's) and a host whose input lock another stream holds.

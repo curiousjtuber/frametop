@@ -4,9 +4,9 @@
 # Frame's copy of the repo (FRAME_REPO) is this checkout, wherever it was cloned.
 # On a PC, FRAME_LOCAL=0: commands run over SSH on $FRAME_HOST (default "frame"), and the
 # Frame's copy is the one scripts/sync.sh keeps at ~/dev/frametop.
-# FRAME_LOCAL, FRAME_HOST, FRAME_REPO, and FRAME_BOX (container, default "dev") can be
-# set in the environment to override. FRAME_IN_BOX=1 means this already runs inside the
-# build container (the image build, pack/Containerfile): commands run here, in this checkout.
+# FRAME_LOCAL, FRAME_HOST, FRAME_REPO, and FRAME_BOX (Remote Access's container, default
+# "dev") can be set in the environment to override. FRAME_IN_BOX=1 means this runs inside the
+# build image (pack/Containerfile): commands run here, in this checkout, as on the host.
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
@@ -37,9 +37,9 @@ else
 fi
 FRAME_HOST=${FRAME_HOST:-frame}
 FRAME_BOX=${FRAME_BOX:-dev}
-# FRAME_RELEASE=1: this tree is a release (get.sh --release), copied out of its image with its
-# programs built, and its .frametop-release names the image and the container they run in
-# (scripts/in-box). It never builds: installers skip the build steps.
+# FRAME_RELEASE=1: this tree is a release (get.sh --release), unpacked with its programs built
+# for the host and its Python runtime's Flatpak bundle beside them (.frametop-release names
+# the version and the bundle). It never builds: installers skip the build steps.
 FRAME_RELEASE=0
 [ -f "$REPO_ROOT/.frametop-release" ] && FRAME_RELEASE=1
 
@@ -102,7 +102,7 @@ start_with_steamvr() {
   local unit=$1
   printf '%s' "if systemctl --user is-active --quiet steamvr.service; then
 systemctl --user restart $unit
-# distrobox enter takes a few seconds.
+# A service takes a moment to come up.
 for i in \$(seq 20); do systemctl --user is-active --quiet $unit && break; sleep 1; done
 echo \"$unit: \$(systemctl --user is-active $unit)\"; journalctl --user -u $unit --no-pager -o cat -n 3
 else

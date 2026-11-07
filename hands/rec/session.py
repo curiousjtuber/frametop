@@ -57,7 +57,7 @@ from hands.rec import livelog  # noqa: E402  (hands/rec/livelog.py: a debug sess
 from hands.rec import voicelog  # noqa: E402  (hands/rec/voicelog.py: a debug session's microphone, if ticked)
 from hands.rec import eventlog  # noqa: E402  (hands/rec/eventlog.py: a debug session's copy of what the panels and pointer did)
 # What the recorders share (recorder/): the window and the tests import it from there.
-from recorder.common import (mono_ns, clock_sample, in_container, host_command, host_path,  # noqa: E402
+from recorder.common import (mono_ns, clock_sample, host_command, host_path,  # noqa: E402
                              write_json, clean_text, tree_version, os_version as _os_version,
                              steamvr_version as _steamvr_version)
 from recorder import bounties  # noqa: E402
@@ -70,9 +70,6 @@ from recorder.button import (INPUT_DEVICES, BUTTON_DEVICE, BUTTON_DOUBLE_S, BUTT
 FT_HANDS = os.path.join(HANDS, "build", "ft-hands")
 FT_CAMD = os.path.join(HANDS, "build", "ft-camd")
 PANEL_BIN = os.path.join(HERE, "build", "ft-handpanel")
-# Runs a program in the container this tree was built for: "dev" in a clone, the release's own in a
-# release (it starts the container first)
-IN_BOX = os.path.join(REPO, "scripts", "in-box")
 SCRIPT_PATH = os.path.join(HERE, "script.json")
 DEBUG_SCRIPT = os.path.join(HERE, "debug.json")         # a debug session: Frametop's own hand tracking, used as usual
 BOARD_PATH = os.path.join(HERE, "bounties.json")      # the bounty board shipped with the recorder
@@ -483,9 +480,7 @@ def get_ready(frametop_hands=False, need_live=False, panel_bin=None, on_part=lam
             if not start_live("hands"):
                 return out
         else:
-            argv = [FT_HANDS, "--no-gestures", "--status", "0"]
-            if not STANDALONE:   # built in Frametop's container: it runs there
-                argv = [IN_BOX] + argv
+            argv = [FT_HANDS, "--no-gestures", "--status", "0"]  # built for the host (hands/build.sh)
             try:
                 if start_unit(HANDS_UNIT, "hand tracking for feedback", argv, log):
                     out["units"].append(HANDS_UNIT)
@@ -699,8 +694,6 @@ class Recorder:
                 "--sides", "auto" if swap is None else "1" if swap else "0"]
         if ring:
             argv += ["--ring", ring]
-        if not in_container() and not STANDALONE:
-            argv = [IN_BOX] + argv
         self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file)
         self.started_ns = mono_ns()
 
@@ -1981,9 +1974,7 @@ class Session(Controls):
             raise _Stop()
 
     def _start_tracker(self):
-        argv = [FT_HANDS, "--no-gestures", "--status", "0"]
-        if not STANDALONE:   # built in Frametop's container: it runs there
-            argv = [IN_BOX] + argv
+        argv = [FT_HANDS, "--no-gestures", "--status", "0"]  # built for the host (hands/build.sh)
         if self.ring:
             argv += ["--ring", self.ring]
         self._start_unit(HANDS_UNIT, "hand tracking for feedback", argv)

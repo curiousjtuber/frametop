@@ -3,9 +3,8 @@
 
   fake-viewer FT-STREAM HOST CLIENT APP WxH FPS KBPS SECONDS OUT [LOCK]
 
-Runs inside the Frametop container (verify-frametop starts it through scripts/in-box), because
-ft-stream's converter needs the container's Mesa: on the host it can't import a decoder buffer
-(EGL 0x3009). It starts `FT-STREAM stream HOST --id CLIENT --fd N ...` on a SOCK_SEQPACKET socket
+Runs on the host, as ft-stream does (built for it). It starts `FT-STREAM stream HOST --id CLIENT
+--fd N ...` on a SOCK_SEQPACKET socket
 pair as ft-screens does (screens/remote.c), hands every ring buffer back as soon as it's shown,
 and after SECONDS (or once the stream is lost) closes its end, which ends ft-stream. In OUT:
 ft-stream.log (its own output), viewer.json (pids while it runs) and result.json (states, frames,

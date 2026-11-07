@@ -334,7 +334,7 @@ class VerifySkillTests(unittest.TestCase):
         self.assertFalse(self.v.LOCK.exists())
 
     def stream_fixture(self, result):
-        """A layout with dody and oma7, and an in-box that writes RESULT as the fake viewer would,
+        """A layout with dody and oma7, and a Popen that writes RESULT as the fake viewer would,
         noting whether dody's input lock was held while it ran."""
         layout = Path(self.tmp.name) / 'layout.json'
         layout.write_text(json.dumps({'hosts': [

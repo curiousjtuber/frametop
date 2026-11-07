@@ -71,7 +71,6 @@ import ft_commands  # noqa: E402  (your commands)
 import spotsearch  # noqa: E402
 
 PANEL = os.path.join(REPO, "screens", "build", "ft-spotpanel")
-IN_BOX = os.path.join(REPO, "scripts", "in-box")  # runs a program in the container it was built in
 FT_LAYOUT = os.path.join(REPO, "layout", "ft-layout")
 STANDALONE_ACTION = "frametop-standalone"  # Launch as Standalone (float/ft_apps.py): what Enter does anyway
 USAGE_PATH = os.path.expanduser("~/.config/frametop-frunner.json")
@@ -384,10 +383,9 @@ class Frunner:
         if not os.path.exists(PANEL):
             log(f"ft-spotpanel isn't built: run {REPO}/screens/build.sh")
             return False
-        env = dict(os.environ, XDG_RUNTIME_DIR=f"/run/user/{os.getuid()}")  # podman needs the real one
-        args = [IN_BOX, PANEL, "--watch-stdin", "--socket", self.args.panel_socket, "--notify", self.args.socket]
+        args = [PANEL, "--watch-stdin", "--socket", self.args.panel_socket, "--notify", self.args.socket]
         try:
-            self.panel = subprocess.Popen(args, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            self.panel = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                           start_new_session=True)
         except OSError as e:
             log(f"ft-spotpanel: {e}")

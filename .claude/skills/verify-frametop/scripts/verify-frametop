@@ -434,8 +434,8 @@ def stopped(*_):
 
 
 def kill_viewer(out, wait=5.0):
-    """Kill the fake viewer and its ft-stream: a signal to in-box doesn't reach the container,
-    but it shares our pid namespace. viewer.json names them once the viewer has started."""
+    """Kill the fake viewer and its ft-stream, by the pids viewer.json names once the viewer
+    has started (the viewer is in a session of its own, so the group isn't ours)."""
     end = time.monotonic() + wait
     while True:
         try:
@@ -512,12 +512,12 @@ def stream(host, client=None, seconds=20.0, allow_host_input=False, mic_bursts=F
             # ft-stream records its default source, which libpulse takes from PULSE_SOURCE.
             fifo = RUNTIME / f'{MIC_SOURCE}.fifo'
             modules = [pipe_source(fifo)]
-            env = ['env', f'PULSE_SOURCE={MIC_SOURCE}']
+            env = [f'PULSE_SOURCE={MIC_SOURCE}']
         # The viewer holds the input lock itself, so it goes when the stream does, however this
-        # process ends.
-        with open(out / 'in-box.log', 'wb') as log:
+        # process ends. ft-stream is built for the host, so the viewer runs on it directly.
+        with open(out / 'viewer.log', 'wb') as log:
             viewer = subprocess.Popen(
-                [str(RELEASES / 'current' / 'scripts' / 'in-box'), *env, 'python3', str(VIEWER), str(exe), address,
+                ['/usr/bin/env', *env, 'python3', str(VIEWER), str(exe), address,
                  client, display.get('app') or 'primary', f'{width}x{height}', '30', '20000', str(seconds), str(out),
                  *([] if allow_host_input else [str(lock_name(address))])],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log)
@@ -556,7 +556,7 @@ def stream(host, client=None, seconds=20.0, allow_host_input=False, mic_bursts=F
     try:
         result = json.loads((out / 'result.json').read_text())
     except (OSError, ValueError):
-        result = {'exit': None, 'error': 'the viewer left no result: see in-box.log and ft-stream.log'}
+        result = {'exit': None, 'error': 'the viewer left no result: see viewer.log and ft-stream.log'}
     states = [s for _, s in result.get('states', [])]
     summary = {'ok': any(s.startswith('live') for s in states) and result.get('frames', 0) > 0,
                'host': entry.get('name'), 'client': client, 'app': display.get('app'),

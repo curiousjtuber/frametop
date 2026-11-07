@@ -27,9 +27,7 @@ if len(sys.argv) < 2:
     sys.exit(__doc__)
 state = open(sys.argv[2]).read() if len(sys.argv) > 2 else SAMPLE
 raw = "/tmp/ft-spotpanel-render.rgba"
-subprocess.run([os.path.join(REPO, "scripts", "in-box"), os.path.join(REPO, "screens", "build", "ft-spotpanel"),
-                "--render", raw], input=state.encode(), check=True,
-               env=dict(os.environ, XDG_RUNTIME_DIR=f"/run/user/{os.getuid()}"))
+subprocess.run([os.path.join(REPO, "screens", "build", "ft-spotpanel"), "--render", raw], input=state.encode(), check=True)
 with open(raw, "rb") as f:
     px = f.read()
 panel = GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(px), GdkPixbuf.Colorspace.RGB, True, 8, W, H, W * 4)

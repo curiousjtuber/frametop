@@ -122,17 +122,16 @@ if [ "${1:-}" != --inner ]; then
       -- "$0" --inner
   fi
 
-  # ft-screens runs in Frametop's container (it's built against Fedora's wlroots); KWin and
-  # Plasma stay on the host and connect to its socket. in-box starts the container in a scope
-  # of its own, not this desktop's, or stopping the desktop would stop the container.
+  # ft-screens is built for the host (screens/build.sh, wlroots linked in); KWin and Plasma
+  # connect to its socket.
   # Its log is kept across desktop starts and reboots, and rotated by size (screens/logfile.h);
-  # what comes out before ft-screens opens it (the container starting) is appended there too.
+  # what comes out before ft-screens opens it is appended there too.
   socket=ft-screens-0
   screens_log=$HOME/.local/state/frametop/screens.log
   mkdir -p "${screens_log%/*}"
   read -ra screen_args <<< "$("$here/../layout/ft-layout" screen-args)"
   export FT_SCREEN_COUNT=$(( ${#screen_args[@]} / 2 )) FT_FLOAT_SLOTS=$float_slots
-  "$here/../scripts/in-box" "$here/../screens/build/ft-screens" --log "$screens_log" --socket "$socket" \
+  "$here/../screens/build/ft-screens" --log "$screens_log" --socket "$socket" \
     "${screen_args[@]}" --spares "$float_slots" >> "$screens_log" 2>&1 < /dev/null &
   # With HANDS_MODE=frametop, hand tracking and the hand view run while this desktop does
   # (hands/handsmode.py; it does nothing for the other modes).

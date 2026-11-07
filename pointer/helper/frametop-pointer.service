@@ -8,15 +8,11 @@ PartOf=steamvr.service
 Requisite=steamvr.service
 
 [Service]
-# Runs in the container it was built in (the dev container, or a release's: scripts/in-box,
-# which starts it in a scope of its own, so stopping this service can't stop it). The helper
-# process lives in the container, so clean it up explicitly around it.
+# Built for the host (pointer/helper/build.sh), so it runs directly.
 ExecStartPre=-/usr/bin/pkill -x ft-pointer
-ExecStart=@REPO@/scripts/in-box @REPO@/pointer/helper/build/ft-pointer
-ExecStopPost=-/usr/bin/pkill -x ft-pointer
+ExecStart=@REPO@/pointer/helper/build/ft-pointer
 Restart=on-failure
 RestartSec=3
-# The container session (conmon) ignores SIGTERM; don't wait 90 s for it.
 TimeoutStopSec=5
 
 [Install]

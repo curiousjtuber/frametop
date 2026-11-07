@@ -91,7 +91,7 @@ case "${1:-}" in
     args=("${args[@]:0:$((screens * 2))}")
     args+=(--spares "$spares")
     cd "$REPO_ROOT"
-    nohup "$HOME/.local/bin/distrobox" enter "$FRAME_BOX" -- env XDG_RUNTIME_DIR="$rt" \
+    nohup env XDG_RUNTIME_DIR="$rt" \
       ./screens/build/ft-screens --no-vr --socket ft-test-0 --control ft_screens_test "${args[@]}" \
       > "$logs/screens.log" 2>&1 &
     for _ in $(seq 100); do [ -S "$rt/ft-test-0" ] && break; sleep 0.2; done

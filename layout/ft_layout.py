@@ -1090,18 +1090,10 @@ def capture_remotes(sock, layout, eye, heading):
             d["pin"] = {"hand": g["hand"], "rel": g["rel"]}
 
 
-def in_container():
-    return os.path.exists("/run/.containerenv")
-
-
 def run_stream(*args, timeout=60, stdin=None):
-    """ft-stream, in the container ft-screens runs in: "dev" for a clone, the release's own for a
-    release (scripts/in-box). A missing "dev" made distrobox ask whether to create it, and the
-    question hung until the timeout. `stdin`: text for it to read (a --login)."""
-    cmd = [STREAM, *args]
-    if not in_container():
-        cmd = [os.path.join(REPO, "scripts", "in-box"), *cmd]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=stdin)
+    """ft-stream, built for the host (stream/build.sh), as ft-screens is. `stdin`: text for it
+    to read (a --login)."""
+    r = subprocess.run([STREAM, *args], capture_output=True, text=True, timeout=timeout, input=stdin)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -1764,11 +1756,8 @@ def reset_countdown():
     try:
         if not os.access(RESET_TIMER, os.X_OK):
             raise FileNotFoundError(f"countdown helper unavailable: {RESET_TIMER}")
-        # in-box cannot forward the host timeout to its container child. Give the
-        # helper an absolute expiry so a late container start cannot show stale UI.
+        # An absolute expiry, so a helper that starts late can't show a stale countdown.
         command = [RESET_TIMER, "--deadline", f"{started + 6:.9f}"]
-        if not in_container():
-            command = [os.path.join(REPO, "scripts", "in-box"), *command]
         result = subprocess.run(command, timeout=6, check=False)
         if result.returncode:
             log("visible countdown unavailable; continuing the delayed reset")

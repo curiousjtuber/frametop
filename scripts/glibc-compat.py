@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Write scripts/glibc-compat.h: the symbol-version pins that keep a program built against a
+newer glibc runnable on the SteamOS host's (pack/host-and-flatpak.md, "The glibc floor").
+
+  scripts/glibc-compat.py              # print the header for this system's glibc
+  scripts/glibc-compat.py --write      # write scripts/glibc-compat.h
+  scripts/glibc-compat.py --check      # is scripts/glibc-compat.h what this glibc gives? (CI)
+  scripts/glibc-compat.py --from FILE  # from a saved `objdump -T` listing instead
+
+glibc keeps every version of a symbol it ever exported: when a function's behaviour changes
+it gets a new version (sqrtf@@GLIBC_2.43 next to sqrtf@GLIBC_2.17), and a program links the
+newest one by default. Built on a glibc newer than the floor (scripts/host-glibc.sh's
+host_glibc_max: the oldest SteamOS a release runs on), such a program would then refuse to
+start on the floor ("version GLIBC_2.43 not found"). This header is a `.symver` line for every
+symbol of libc and libm whose default version is newer than the floor and which has an older
+version the floor has: a build that includes it (host-glibc.sh adds `-include` to the compiler
+flags) links the older entry points instead. An unused line costs nothing (no reference is
+made). A symbol that only exists newer than the floor (memset_explicit, sinpi) has no line:
+using one fails host_glibc_check, as it should.
+
+Run it where the glibc is the newest a build happens on (a SteamOS beta, the build image); a
+build on the floor's own glibc needs no pins and gets none. The header says which glibc it
+was made from; `--check` fails when this system's glibc would give another, so CI notices a
+newer base before a release does.
+"""
+import argparse
+import hashlib
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+HEADER = os.path.join(HERE, "glibc-compat.h")
+FLOOR_FILE = os.path.join(HERE, "host-glibc.sh")
+LIBS = ("libc.so.6", "libm.so.6")
+VERSION = re.compile(r"^\(?GLIBC_(\d+)\.(\d+)\)?$")
+
+
+def floor():
+    """host_glibc_max in scripts/host-glibc.sh, as (2, 39)."""
+    text = open(FLOOR_FILE).read()
+    m = re.search(r"^host_glibc_max=GLIBC_(\d+)\.(\d+)", text, re.M)
+    if not m:
+        sys.exit(f"{FLOOR_FILE}: no host_glibc_max=GLIBC_X.Y line")
+    return int(m.group(1)), int(m.group(2))
+
+
+def library(name):
+    """The shared library's path: where the compiler links it from."""
+    try:
+        path = subprocess.run(["gcc", f"-print-file-name={name}"], capture_output=True, text=True,
+                              check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        path = name
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+    for d in ("/usr/lib", "/lib", "/usr/lib64", "/lib64", "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu"):
+        if os.path.exists(os.path.join(d, name)):
+            return os.path.join(d, name)
+    sys.exit(f"can't find {name}")
+
+
+def listing(path):
+    return subprocess.run(["objdump", "-T", path], capture_output=True, text=True, check=True).stdout
+
+
+def versions(text):
+    """{symbol: {version tuple: is default}} from an `objdump -T` listing. The version column is
+    `GLIBC_2.43` for the default (what a new link takes) and `(GLIBC_2.17)` for an older one
+    kept for existing binaries."""
+    out = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 7:
+            continue
+        m = VERSION.match(parts[-2])
+        if not m:
+            continue
+        name = parts[-1]
+        if name.startswith("GLIBC_"):
+            continue  # the version definitions themselves
+        out.setdefault(name, {})[(int(m.group(1)), int(m.group(2)))] = not parts[-2].startswith("(")
+    return out
+
+
+def pins(text, floor_version):
+    """(symbol, old version) for every symbol whose default version is newer than the floor and
+    which has a version the floor has; and the symbols newer than the floor with none."""
+    pinned, unpinnable = [], []
+    for name, vers in sorted(versions(text).items()):
+        if name.startswith("_ZGV"):
+            continue  # libmvec's vector variants: never declared (the __FAST_MATH__ undef below)
+        default = [v for v, is_default in vers.items() if is_default]
+        if not default or max(default) <= floor_version:
+            continue
+        older = [v for v in vers if v <= floor_version]
+        if older:
+            pinned.append((name, max(older)))
+        else:
+            unpinnable.append((name, max(default)))
+    return pinned, unpinnable
+
+
+def glibc_version():
+    out = subprocess.run(["ldd", "--version"], capture_output=True, text=True).stdout.splitlines()
+    return out[0].strip() if out else "unknown glibc"
+
+
+def render(pinned, unpinnable, floor_version, source):
+    f = "GLIBC_%d.%d" % floor_version
+    lines = [
+        "/* Generated by scripts/glibc-compat.py from %s: don't edit, regenerate." % source,
+        " * Every build for the SteamOS host includes this first (scripts/host-glibc.sh adds",
+        " * -include). The floor is %s. A program linked against a newer glibc takes each" % f,
+        " * symbol's newest version by default; these lines bind it to the version the floor has",
+        " * instead, so the program starts there. An unused line makes no reference. Not for a",
+        " * -static link (libc.a has no versions): those builds leave this out.",
+        " * pack/host-and-flatpak.md says why. */",
+        "#ifndef FT_GLIBC_COMPAT_H",
+        "#define FT_GLIBC_COMPAT_H",
+        "/* No #include here: this comes before the source's own _GNU_SOURCE, and a glibc header",
+        " * included first would fix the feature macros early (ffs and pipe2 went missing). */",
+        "#if defined(__linux__) && defined(__aarch64__) && !defined(FT_NO_GLIBC_COMPAT)",
+    ]
+    for name, old in pinned:
+        lines.append('__asm__(".symver %s,%s@GLIBC_%d.%d");' % (name, name, old[0], old[1]))
+    lines += [
+        "/* glibc's math.h declares vector variants of the math functions (libmvec) when the",
+        " * compiler says __FAST_MATH__, and gcc then calls them from vectorised loops; the aarch64",
+        " * variants that came after the floor (tanhf, erff and more at GLIBC_2.40) have no older",
+        " * version to bind to. Without the macro math.h declares none, and such loops call the",
+        " * scalar functions; the compiler's fast-math stays on. */",
+        "#undef __FAST_MATH__",
+        "#endif",
+    ]
+    if unpinnable:
+        lines.append("/* Newer than the floor, with no older version to bind to (a program that uses one")
+        lines.append(" * fails host_glibc_check):")
+        row = " *"
+        for item in ("%s (%d.%d)" % (n, v[0], v[1]) for n, v in unpinnable):
+            if len(row) + len(item) + 2 > 92:
+                lines.append(row)
+                row = " *"
+            row += " " + item + ","
+        lines.append(row.rstrip(",") + " */")
+    lines.append("#endif")
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--write", action="store_true", help=f"write {HEADER}")
+    ap.add_argument("--check", action="store_true", help=f"fail unless {HEADER} is what this glibc gives")
+    ap.add_argument("--from", dest="listing", help="an `objdump -T` listing of libc and libm, instead of this system's")
+    ap.add_argument("--source", help="what to name as the header's source (default: this glibc)")
+    a = ap.parse_args()
+    floor_version = floor()
+    if a.listing:
+        text = open(a.listing).read()
+        source = a.source or os.path.basename(a.listing)
+    else:
+        text = "".join(listing(library(n)) for n in LIBS)
+        source = a.source or glibc_version()
+    pinned, unpinnable = pins(text, floor_version)
+    header = render(pinned, unpinnable, floor_version, source)
+    if a.check:
+        try:
+            current = open(HEADER).read()
+        except OSError:
+            sys.exit(f"{HEADER} is missing: scripts/glibc-compat.py --write")
+        same = re.sub(r"from .*?:", "from X:", current, count=1) == re.sub(r"from .*?:", "from X:", header, count=1)
+        if not same:
+            sys.exit(f"{HEADER} isn't what this glibc gives ({source}): scripts/glibc-compat.py --write")
+        print(f"{HEADER}: matches this glibc ({len(pinned)} pins)")
+        return
+    if a.write:
+        with open(HEADER, "w") as f:
+            f.write(header)
+        print(f"wrote {HEADER}: {len(pinned)} pins, {len(unpinnable)} symbols newer than the floor with no older version "
+              f"(sha256 {hashlib.sha256(header.encode()).hexdigest()[:12]})")
+    else:
+        sys.stdout.write(header)
+
+
+if __name__ == "__main__":
+    main()

@@ -119,7 +119,7 @@ class Paths(unittest.TestCase):
     def test_install_steps(self):
         self.assertIsNone(fi.install_step('screens/x.py'))
         self.assertIsNone(fi.install_step('scripts/in-box'))
-        for path in ('pointer/driver/build/driver_ft_pointer.so', 'install.sh', 'pack/release-box.sh',
+        for path in ('pointer/driver/build/driver_ft_pointer.so', 'install.sh', 'pack/flatpak/install.sh',
                      'gaze/install.sh', 'screens/frametop-handview.service', 'tour/frametop-tour.desktop',
                      'setup/bluetooth/main.conf', 'gaze/tracker/atomic-update.conf', 'hands/models.pin'):
             self.assertIsNotNone(fi.install_step(path), path)
@@ -136,7 +136,7 @@ class Paths(unittest.TestCase):
         (roots) = ('/r/0.1/', '/r/current/')
         with mock.patch.object(Path, 'is_dir', lambda self: str(self) == '/r/0.1/keyboard'):
             self.assertEqual(fi.dirs_used(tree, 'frametop-pointer.service',
-                                          ['/r/0.1/scripts/in-box', '/r/0.1/pointer/helper/build/ft-pointer'],
+                                          ['/r/0.1/pointer/helper/build/ft-pointer'],
                                           roots), {'pointer/helper'})
             self.assertEqual(fi.dirs_used(tree, 'frametop-gaze.service', ['python3', '/r/0.1/gaze/ft-gazed'],
                                           roots), {'gaze', 'models', 'conf'})
