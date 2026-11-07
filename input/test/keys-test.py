@@ -655,6 +655,12 @@ def tests():
           (False, False))
     check("carry_toggle goes to ft-screens", (relay.needs_pointer("carry_toggle"), relay.SCREENS_ACTIONS["carry_toggle"]),
           (False, b"carry toggle"))
+    use({"125+33": "screen_face"})  # Meta+F
+    key(META, 1); key(F, 1); key(F, 0); key(META, 0)
+    check("screen_face asks ft-screens to turn the screen you're on", [m for m in typed() if m.startswith("face")],
+          ["face look"])
+    check("screen_face works without pointer mode", relay.needs_pointer("screen_face"), False)
+    use(None)
 
     # Meta+Space (a default): frunner's search opens or closes, told it came from a keyboard.
     SPACE = 57

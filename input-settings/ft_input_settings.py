@@ -239,6 +239,7 @@ ACTION_LABELS = {
     "dictate_hold": "Dictation: while held",
     "spin_next": "Spin the panels: next one on the right to the front",
     "spin_prev": "Spin the panels: next one on the left to the front",
+    "screen_face": "Turn the screen you're on to face you",
     "carry_toggle": "Carry the panel under the pointer / carry all",
     "frunner": "Frunner: search apps and remote displays",
     "hands_toggle": "Hand tracking on/off",

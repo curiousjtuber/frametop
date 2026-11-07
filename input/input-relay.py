@@ -38,8 +38,9 @@ keyboard_toggle = open or close Frametop's keyboard, float_toggle = float the de
 pointer (else the active one) in VR, or put it back if it floats, dock_all = put every floating
 window back (both to ft-floatd, @frametop_float), spin_next and spin_prev = turn every panel in the
 room about your head so the next one to the right or left comes to the front (ft-screens' "spin",
-Meta+Alt+Tab and Meta+Alt+Shift+Tab by default), profile:NAME = switch to that profile (ft-layout
-use NAME: its screens and apps; docs/profiles.md), steam_menu = open the SteamVR dashboard on
+Meta+Alt+Tab and Meta+Alt+Shift+Tab by default), screen_face = turn the screen the pointer is on,
+or else the one you're looking at, to face you (ft-screens' "face look"), profile:NAME = switch to
+that profile (ft-layout use NAME: its screens and apps; docs/profiles.md), steam_menu = open the SteamVR dashboard on
 Steam's menu, or close the dashboard (steam/ft-steam menu, through Steam's UI), pause_toggle =
 pause Frametop for a VR game, or resume it (game_pause.py), dictate = start or stop dictation, and
 dictate_hold = dictation while held (Frametop Voice, voice/ft-voiced: "toggle|start|stop <source>"
@@ -335,7 +336,7 @@ RULES_PATH = os.path.expanduser("~/.config/frametop-input.json")
 ACTIONS = ("left", "right", "middle", "back", "scroll_up", "scroll_down", "dashboard", "recenter",
            "pointer_toggle", "follow_toggle", "gaze_toggle", "gaze_precision", "gaze_drag", "gaze_left", "gaze_right",
            "gaze_quickcal", "sens_up", "sens_down", "layout_reset", "screens_toggle", "keyboard_toggle", "float_toggle",
-           "dock_all", "spin_next", "spin_prev", "carry_toggle", "steam_menu", "pause_toggle", "dictate", "dictate_hold",
+           "dock_all", "spin_next", "spin_prev", "screen_face", "carry_toggle", "steam_menu", "pause_toggle", "dictate", "dictate_hold",
            "frunner", "hands_toggle", "release_keys", "key", "none")
 # GAZE_ACTIONS (mouse and keyboard only) and DEFAULT_KEY_BINDINGS, the key combinations a rules
 # file without "key_bindings" gets, are ft_input_actions'.
@@ -385,9 +386,10 @@ FLOAT_ACTIONS = {"float_toggle": b"float pointer", "dock_all": b"dock all"}
 # so the next one to the right or left comes to the front, and screens_toggle hides or shows the
 # screens. carry_toggle carries the panel under the 3D mouse (off any panel: the one nearest your gaze)
 # with its ray until a click or Enter (Esc puts it back); another press meanwhile turns carry-all on or off (Meta+A is the
-# Arteck HB305 touchpad's four-finger tap). They don't need pointer mode either.
+# Arteck HB305 touchpad's four-finger tap). screen_face turns the screen the pointer is on, or else
+# the one you're looking at, to face you. They don't need pointer mode either.
 SCREENS_ACTIONS = {"spin_next": b"spin next", "spin_prev": b"spin prev", "screens_toggle": b"toggle",
-                   "carry_toggle": b"carry toggle"}
+                   "carry_toggle": b"carry toggle", "screen_face": b"face look"}
 # frunner (frunner/ft-frunner, in the Frametop desktop) opens or closes its search; it's told
 # what pressed it, since one from a mouse or controller opens Frametop's keyboard too. It doesn't
 # need pointer mode, and does nothing while Frametop is paused.

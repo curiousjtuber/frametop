@@ -40,6 +40,7 @@ int main() {
         {"sub 5 1 10 20 300 200", Sub}, {"sub 5 1 off", Sub}, {"minimized 5 1", Minimized},
         {"moving 5 1", Moving}, {"torn 5 100 200", Torn}, {"carry toggle", CarryToggle}, {"carry take 5", CarryTake},
         {"carryturn 1.5 -2", CarryTurn}, {"carry 5", Carry}, {"up", Up}, {"spin 30", Spin},
+        {"face look", Face}, {"face 2", Face},
         {"front 2", Front}, {"debug", Debug}, {"state", State},
     };
     bool all = true;
@@ -91,6 +92,7 @@ int main() {
     check("hide, show, toggle are prefixes", V("hidex") == HideShowToggle && V("toggled") == HideShowToggle);
     check("hold needs its two numbers", V("hold 1 2") == Hold && V("hold") == Unknown);
     check("spindistance is no spin; spin needs its space", V("spindistance x") == Unknown && V("spin") == Unknown);
+    check("face needs its screen or look", V("face") == Unknown);
     check("steamvrmode with too few numbers is no steamvr list", V("steamvrmode 1 2") == Unknown);
     check("handsetting needs both words (and is no \"hands\" either)", V("handsetting KEY") == Unknown);
     check("hands needs three", V("hands hand controller") == Unknown);
@@ -112,6 +114,6 @@ int main() {
     check("groups: helper words, hand features, cutouts, floating, spin",
           GroupOf(Hands) == HelperWordGroup && GroupOf(SpinDistance) == HelperWordGroup &&
               GroupOf(GrabThat) == HandFeatureGroup && GroupOf(Cutouts) == CutoutsGroup && GroupOf(Up) == FloatGroup &&
-              GroupOf(Moving) == FloatGroup && GroupOf(Spin) == SpinGroup);
+              GroupOf(Moving) == FloatGroup && GroupOf(Spin) == SpinGroup && GroupOf(Face) == SpinGroup);
     return failed ? 1 : 0;
 }

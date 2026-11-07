@@ -62,6 +62,8 @@ If you work in the desktop for long stretches, or leave the headset on a stand, 
 | Drag the tab on a screen's bottom right corner | Resizes the screen |
 | Click the curve button (next to the bar) | Curves the screen around you, or flattens it |
 | Drag the roll button sideways, or scroll on it | Rolls the screen; it snaps level near straight |
+| Click the face button (the eye, left of the pin button) | Turns the screen where it is to face you, and levels it. Floating windows have one too. Also mappable to a mouse button, controller button, or key combination as Turn the screen you're on to face you |
+| Click the face button (the eye, left of the bar) | Turns the screen where it is to face you, and levels it. Floating windows have one too. Also mappable to a mouse button, controller button, or key combination as Turn the screen you're on to face you |
 | While carrying a screen, sweep its laser across your other controller's ring, then let go | Pins it to that wrist, at its size and distance, as you hold it when you let go; it shows while you see its front. Grab its bar to adjust it (it stays pinned); sweep across the ring again to take it off |
 | Set a screen to On your head (Frametop Display Settings, Visibility & pins) | Pins it to your head where it is, like a HUD. Grab its bar to move it; it stays on your head |
 | Meta+Shift+R in the desktop | Shows a three-second countdown, then puts the screens back in their layout around you, leaving app windows, fullscreen and streams as they are (also Reset Screen Layout in the menu, and mappable to a button). Screens on a wrist stay there. To bring back a profile's apps too, open the profile: its name in frunner, or Open profile in Display Settings |
